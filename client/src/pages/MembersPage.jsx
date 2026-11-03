@@ -6,6 +6,13 @@ import { deleteMemberAccount } from '../services/adminService.js'
 import { getMembers } from '../services/memberService.js'
 import useAutoDismiss from '../hooks/useAutoDismiss.js'
 
+function formatRole(role) {
+  const normalizedRole = String(role || 'member').trim().toLowerCase()
+  return normalizedRole === 'member'
+    ? 'Member'
+    : normalizedRole.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
 export default function MembersPage({ user }) {
   const [members, setMembers] = useState([])
   const [search, setSearch] = useState('')
@@ -43,7 +50,9 @@ export default function MembersPage({ user }) {
   const results = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return members
-    return members.filter(member => member.fullName.toLowerCase().includes(term))
+    return members.filter(member =>
+      String(member.fullName || '').toLowerCase().includes(term),
+    )
   }, [members, search])
 
   function openDeletionConfirmation(member) {
@@ -119,6 +128,7 @@ export default function MembersPage({ user }) {
               <thead>
                 <tr>
                   <th scope="col">MEMBER</th>
+                  <th scope="col">ROLE</th>
                   <th scope="col">REGISTERED</th>
                   <th scope="col">STATUS</th>
                   {canDeleteMembers && <th scope="col">ACTIONS</th>}
@@ -132,6 +142,11 @@ export default function MembersPage({ user }) {
                         <Avatar name={member.fullName} />
                         {member.fullName}
                       </span>
+                    </td>
+                    <td>
+                      <StatusBadge tone={formatRole(member.role) === 'Member' ? 'neutral' : 'success'}>
+                        {formatRole(member.role)}
+                      </StatusBadge>
                     </td>
                     <td>
                       {member.registeredAt

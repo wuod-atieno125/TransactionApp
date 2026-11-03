@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 
 
 const router = express.Router();
+const MEMBER_REVERSAL_WINDOW_MINUTES = 15;
 
 function getPagination(queryParams) {
   const parseIntegerParam = (value) => {
@@ -147,7 +148,7 @@ async function reverseTransaction(client, {
 router.get(
   "/",
   requireAuth,
-  requireRole("member", "treasurer", "chairperson"),
+  requireRole("member", "treasurer", "chairperson", "secretary"),
   async (req, res, next) => {
     try {
       const pagination = getPagination(req.query);
@@ -165,7 +166,7 @@ router.get(
 
       let result;
 
-      if (role === "member") {
+      if (role === "member" || role === "secretary") {
         result = await query(
           `SELECT transactions.id, transactions.member_user_id,
                   transactions.entered_member_name, transactions.amount,
@@ -174,7 +175,9 @@ router.get(
                   transactions.created_at, transactions.updated_at,
                   reversal_request.status AS reversal_request_status,
                   transactions.created_at < NOW() - INTERVAL '12 hours'
-                    AS reversal_approval_required
+                    AS reversal_approval_required,
+                  transactions.created_at >= NOW() - INTERVAL '15 minutes'
+                    AS member_reversal_allowed
            FROM transactions
            LEFT JOIN LATERAL (
              SELECT status
@@ -201,7 +204,9 @@ router.get(
                   transactions.created_at, transactions.updated_at,
                   reversal_request.status AS reversal_request_status,
                   transactions.created_at < NOW() - INTERVAL '12 hours'
-                    AS reversal_approval_required
+                    AS reversal_approval_required,
+                  transactions.created_at >= NOW() - INTERVAL '15 minutes'
+                    AS member_reversal_allowed
            FROM transactions
            LEFT JOIN LATERAL (
              SELECT status
@@ -806,6 +811,18 @@ router.patch(
       const oldTransaction = existingResult.rows[0];
 
       if (
+        role === "member" &&
+        new Date(oldTransaction.created_at).getTime() <
+          Date.now() - MEMBER_REVERSAL_WINDOW_MINUTES * 60 * 1000
+      ) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          success: false,
+          message: "Members can only request a transaction reversal within 15 minutes of the transaction being recorded.",
+        });
+      }
+
+      if (
         (role === "member" || oldTransaction.approval_required) &&
         reason.length < 5
       ) {
@@ -1366,10 +1383,12 @@ router.get(
 router.get(
   "/summary",
   requireAuth,
-  requireRole("member", "treasurer", "chairperson"),
+  requireRole("member", "treasurer", "chairperson", "secretary"),
   async (req, res, next) => {
     try {
-      const isMember = req.session.user.role === "member";
+      const isMember = ["member", "secretary"].includes(
+        String(req.session.user.role || "").toLowerCase()
+      );
 
       const result = await query(
         `SELECT
@@ -2224,7 +2243,11 @@ router.get("/notifications/unread-count", requireAuth, async (req, res, next) =>
 });
 
 
-router.get("/:id", requireAuth, requireRole("member", "treasurer", "chairperson"), async (req, res, next) => {
+router.get(
+  "/:id",
+  requireAuth,
+  requireRole("member", "treasurer", "chairperson", "secretary"),
+  async (req, res, next) => {
   const { id } = req.params;
 
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
@@ -2262,7 +2285,8 @@ router.get("/:id", requireAuth, requireRole("member", "treasurer", "chairperson"
       return res.status(404).json({
         success: false,
         message: "Transaction not found.",
-      });
+        }
+      );
     }
 
     return res.status(200).json({
@@ -2278,7 +2302,7 @@ router.get("/:id", requireAuth, requireRole("member", "treasurer", "chairperson"
 router.get(
   "/summary/overview",
   requireAuth,
-  requireRole("member", "treasurer", "chairperson"),
+  requireRole("member", "treasurer", "chairperson", "secretary"),
   async (req, res, next) => {
     try {
       const result = await query(

@@ -51,13 +51,14 @@ export function verifyPasswordResetCode(email, code) {
   })
 }
 
-export function resetPassword(email, code, newPassword) {
+export function resetPassword(email, code, newPassword, username) {
   return apiRequest('/auth/reset-password', {
     method: 'POST',
     body: JSON.stringify({
       email,
       code,
-      newPassword
+      newPassword,
+      ...(username ? { username } : {}),
     }),
   })
 }

@@ -167,9 +167,13 @@ async function verifyPasswordResetCode(email, code) {
   }
 }
 
-async function resetPassword(email, code, newPassword) {
+async function resetPassword(email, code, newPassword, username) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const submittedCode = String(code || "").trim();
+  const normalizedUsername =
+    typeof username === "string" && username.trim()
+      ? username.trim().toLowerCase()
+      : null;
 
   if (!/^\d{6}$/.test(submittedCode)) {
     throw authError(INVALID_CODE_MESSAGE, 400);
@@ -240,13 +244,21 @@ async function resetPassword(email, code, newPassword) {
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
-    await client.query(
-      `UPDATE users
-          SET password_hash = $1,
-              updated_at = NOW()
-        WHERE id = $2`,
-      [passwordHash, recovery.user_id]
-    );
+    try {
+      await client.query(
+        `UPDATE users
+            SET password_hash = $1,
+                username = COALESCE($2, username),
+                updated_at = NOW()
+          WHERE id = $3`,
+        [passwordHash, normalizedUsername, recovery.user_id]
+      );
+    } catch (error) {
+      if (error.code === "23505" && error.constraint === "users_username_lower_unique") {
+        throw authError("That username is already in use.", 409);
+      }
+      throw error;
+    }
 
     // Consume all outstanding codes for this user.
     await client.query(
@@ -266,9 +278,12 @@ async function resetPassword(email, code, newPassword) {
 
     await client.query(
       `INSERT INTO audit_logs
-         (actor_user_id, action, target_type, target_id)
-       VALUES (NULL, 'account_password_reset', 'user', $1)`,
-      [recovery.user_id]
+         (actor_user_id, action, target_type, target_id, new_values)
+       VALUES (NULL, 'account_password_reset', 'user', $1, $2::jsonb)`,
+      [
+        recovery.user_id,
+        JSON.stringify({ usernameChanged: Boolean(normalizedUsername) }),
+      ]
     );
 
     await client.query("COMMIT");

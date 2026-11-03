@@ -21,6 +21,7 @@ import ProfilePage from './pages/ProfilePage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import TechnicalAdminPage from './pages/TechnicalAdminPage.jsx'
+import AuditLogPage from './pages/AuditLogPage.jsx'
 import SessionTimeout from './components/SessionTimeout.jsx'
 import useAutoDismiss from './hooks/useAutoDismiss.js'
 
@@ -37,12 +38,11 @@ const pageComponents = {
   notifications: NotificationsPage,
   profile: ProfilePage,
   technicalAdmin: TechnicalAdminPage,
+  auditLog: AuditLogPage,
 }
 
-function defaultPageFor(user) {
-  return String(user?.role || '').toLowerCase() === 'secretary'
-    ? 'account'
-    : 'dashboard'
+function defaultPageFor() {
+  return 'dashboard'
 }
 
 export default function App() {
@@ -102,7 +102,7 @@ export default function App() {
       setUser(null)
       setPage('dashboard')
       setAuthPage('landing')
-      setAuthNotice('You have been signed out.')
+      setAuthNotice('You’re safely signed out. See you again soon.')
     } catch (error) {
       setAppError(error.message || 'Unable to sign out. Please try again.')
     } finally {
@@ -130,7 +130,7 @@ export default function App() {
     setUser(null)
     setPage('dashboard')
     setAuthPage('login')
-    setAuthNotice('Your session expired after 20 minutes of inactivity. Please sign in again.')
+    setAuthNotice('Your session has ended for your security. Please sign in again.')
   }
 
   function handleAccountUpdated(account) {
@@ -260,11 +260,11 @@ if (authPage === 'set-new-password') {
       'groupRules', 'meetings', 'minutes', 'notifications', 'account', 'profile',
     ],
     secretary: [
-      'members', 'groupRules', 'meetings', 'minutes',
+      'dashboard', 'transactions', 'members', 'groupRules', 'meetings', 'minutes',
       'notifications', 'account', 'profile',
     ],
     technical_admin: [
-      'technicalAdmin', 'notifications', 'account', 'profile',
+      'technicalAdmin', 'auditLog', 'notifications', 'account', 'profile',
     ],
   }
 
@@ -283,7 +283,7 @@ if (authPage === 'set-new-password') {
       loggingOut={loggingOut}
     >
       {appError && (
-        <p className="app-error" role="alert">
+        <p className="app-error app-feedback-toast" role="alert">
           {appError}
         </p>
       )}

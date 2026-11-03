@@ -57,7 +57,7 @@ function getOverviewStats(overview, role) {
 
   const members = dashboard.members || {}
 
-  if (role === 'member') {
+  if (['member', 'secretary'].includes(role)) {
     return [
       {
         label: 'My contributions',
@@ -273,7 +273,7 @@ export default function DashboardPage({ user, onNavigate }) {
         </section>
       ) : (
         <>
-          <section className={`stat-grid${role === 'member' ? ' stat-grid-member' : ''}`}>
+          <section className={`stat-grid${['member', 'secretary'].includes(role) ? ' stat-grid-member' : ''}`}>
             {stats.map((stat) => (
               <article
                 key={stat.label}
@@ -305,7 +305,7 @@ export default function DashboardPage({ user, onNavigate }) {
               <div>
                 <h2>Recent transactions</h2>
                 <p>
-                  {role === 'member'
+                  {['member', 'secretary'].includes(role)
                     ? 'Your recent contribution transactions.'
                     : 'Latest contribution transactions recorded for your group.'}
                 </p>

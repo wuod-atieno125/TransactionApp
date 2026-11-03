@@ -1,15 +1,19 @@
-.app-shell[data-page='technicalAdmin'] .main-area {
+.app-shell[data-page='technicalAdmin'] .main-area,
+.app-shell[data-page='auditLog'] .main-area {
   background: #f0f4ff;
 }
 
-.app-shell[data-page='technicalAdmin'] .topbar {
+.app-shell[data-page='technicalAdmin'] .topbar,
+.app-shell[data-page='auditLog'] .topbar {
   min-height: 80px;
   border-bottom-color: #e5ebf8;
   background: #fff;
 }
 
-.app-shell[data-page='technicalAdmin'] .sidebar-brand-icon { color: #fff; background: #2451dc; box-shadow: none; }
-.app-shell[data-page='technicalAdmin'] .sidebar-brand-text strong span { color: #2451dc; }
+.app-shell[data-page='technicalAdmin'] .sidebar-brand-icon,
+.app-shell[data-page='auditLog'] .sidebar-brand-icon { color: #fff; background: #2451dc; box-shadow: none; }
+.app-shell[data-page='technicalAdmin'] .sidebar-brand-text strong span,
+.app-shell[data-page='auditLog'] .sidebar-brand-text strong span { color: #2451dc; }
 .app-shell[data-page='technicalAdmin'] .sidebar-brand-text small { display: none; }
 .technical-admin-group-card { display: grid; gap: 6px; margin: 0 4px 24px; padding: 16px; border-radius: 16px; background: #f0f4ff; }
 .technical-admin-group-card span { color: #687ba7; font-size: 10px; font-weight: 800; letter-spacing: 1px; }
@@ -20,7 +24,8 @@
 .app-shell[data-page='technicalAdmin'] .sidebar-nav-item:hover:not(.active) { color: #2451dc; background: #f5f7fd; }
 .app-shell[data-page='technicalAdmin'] .sidebar-user .avatar { color: #fff; background: #2451dc; }
 
-.app-shell[data-page='technicalAdmin'] .page-content {
+.app-shell[data-page='technicalAdmin'] .page-content,
+.app-shell[data-page='auditLog'] .page-content {
   width: min(100%, 1440px);
   padding: 38px 40px 24px;
 }

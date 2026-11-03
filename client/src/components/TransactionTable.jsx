@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import Avatar from './ui/Avatar.jsx'
 import StatusBadge from './ui/StatusBadge.jsx'
 import { formatCurrency } from '../utils/formatCurrency.js'
@@ -8,7 +9,13 @@ export default function TransactionTable({
   canRequestReversal = false,
   onReverse,
 }) {
+  const [now, setNow] = useState(() => Date.now())
   const showAction = canReverse || canRequestReversal
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   return <div className="table-wrap"><table><thead><tr><th>MEMBER</th><th>M-PESA CODE</th><th>DATE</th><th>AMOUNT</th><th>STATUS</th>{showAction && <th>ACTION</th>}</tr></thead><tbody>
     {rows.map(row => {
@@ -37,6 +44,11 @@ export default function TransactionTable({
       const requestPending = reversalRequestStatus === 'pending' ||
         reversalRequestStatus === 'pending_treasurer' ||
         reversalRequestStatus === 'pending_chairperson'
+      const memberReversalExpired = canRequestReversal && (
+        row.member_reversal_allowed === false ||
+        (row.created_at &&
+          now >= new Date(row.created_at).getTime() + 15 * 60 * 1000)
+      )
 
       return (
         <tr key={row.id || reference}>
@@ -55,9 +67,21 @@ export default function TransactionTable({
           {showAction && (
             <td>
               {row.status === 'active' && !requestPending ? (
-                <button className="transaction-reverse-button" type="button" onClick={() => onReverse?.(row)}>
+                <button
+                  className="transaction-reverse-button"
+                  type="button"
+                  onClick={() => onReverse?.(row)}
+                  disabled={memberReversalExpired}
+                  title={memberReversalExpired
+                    ? 'Members can only request a reversal within 15 minutes of the transaction being recorded.'
+                    : undefined}
+                >
                   {canRequestReversal
-                    ? 'Request reversal'
+                    ? memberReversalExpired
+                      ? 'Reverse disabled'
+                      : reversalRequestStatus === 'rejected'
+                        ? 'Request reversal again'
+                        : 'Request reversal'
                     : row.reversal_approval_required
                     ? 'Request approval'
                     : 'Reverse'}

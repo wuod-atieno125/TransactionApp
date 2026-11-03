@@ -78,12 +78,20 @@ router.get(
   async (req, res, next) => {
     try {
       const result = await query(
-        `SELECT id, full_name, account_status, created_at
+        `SELECT id, full_name, LOWER(TRIM(role)) AS role,
+                LOWER(TRIM(account_status)) AS account_status, created_at
          FROM users
-         WHERE role = 'member'
-           AND account_status = 'approved'
+         WHERE LOWER(TRIM(role)) <> 'technical_admin'
+           AND LOWER(TRIM(account_status)) = 'approved'
            AND deleted_at IS NULL
-         ORDER BY full_name ASC`
+         ORDER BY
+           CASE LOWER(TRIM(role))
+             WHEN 'chairperson' THEN 1
+             WHEN 'treasurer' THEN 2
+             WHEN 'secretary' THEN 3
+             ELSE 4
+           END,
+           full_name ASC`
       );
 
       return res.status(200).json({
@@ -92,6 +100,7 @@ router.get(
         members: result.rows.map((user) => ({
           id: user.id,
           fullName: user.full_name,
+          role: user.role,
           accountStatus: user.account_status,
           registeredAt: user.created_at,
         })),

@@ -1,25 +1,19 @@
 import { useState } from 'react'
-import facebookLogo from '../assets/facebook.jpeg'
-import messageLogo from '../assets/message.jpeg'
-import phoneLogo from '../assets/phone.jpeg'
+import facebookLogo from '../assets/fb.png'
 import emailLogo from '../assets/email.jpeg'
-import tiktokLogo from '../assets/tiktok.jpeg'
-import whatsappLogo from '../assets/whatsapp.jpeg'
+import whatsappLogo from '../assets/whatsapp.png'
 import Sidebar from './Sidebar.jsx'
 import Topbar from './Topbar.jsx'
+
+const whatsappMessage =
+  'hello it`s haningtone the designer of the Pamoja contribution management group, Any service you need?'
 
 const footerLinks = [
   {
     label: 'WhatsApp',
-    href: 'https://wa.me/254794358892',
+    href: `https://wa.me/254794358892?text=${encodeURIComponent(whatsappMessage)}`,
     icon: whatsappLogo,
     external: true,
-  },
-  { label: 'Phone', href: 'tel:+254113745958', icon: phoneLogo },
-  {
-    label: 'Message',
-    href: 'sms:0794358892',
-    icon: messageLogo,
   },
   {
     label: 'Facebook',
@@ -31,12 +25,6 @@ const footerLinks = [
     label: 'Email',
     href: 'mailto:haningtonemasinde9@gmail.com',
     icon:emailLogo,
-    external: true,
-  },
-  {
-    label: 'TikTok',
-    href: 'https://www.tiktok.com/@wuod_atieno01',
-    icon: tiktokLogo,
     external: true,
   },
 ]
@@ -54,6 +42,7 @@ const titles = {
   notifications: 'Notifications',
   profile: 'Profile',
   technicalAdmin: 'Technical Administration',
+  auditLog: 'Audit Log Report',
 }
 
 export default function AppLayout({
@@ -99,21 +88,25 @@ export default function AppLayout({
         />
         <div className="page-content" id="main-content">
           {children}
-          <footer className="app-footer">
+          <footer className="app-footer app-footer--centered">
             <div className="app-footer__credits">
               <span>Copyright © {new Date().getFullYear()} Wuod Atieno</span>
               <span>Designed and developed by Haningtone Omondi</span>
             </div>
-            <nav className="app-footer__links" aria-label="Contact and social links">
+            <nav
+              className="app-footer__links app-footer__social-links"
+              aria-label="Contact and social links"
+            >
               {footerLinks.map(({ label, href, icon, external }) => (
                 <a
-                  className="app-footer__link"
+                  className={`app-footer__link app-footer__link--${label.toLowerCase()}`}
                   href={href}
                   key={label}
+                  aria-label={label}
+                  title={label}
                   {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
                 >
                   <img src={icon} alt="" aria-hidden="true" />
-                  <span>{label}</span>
                 </a>
               ))}
             </nav>

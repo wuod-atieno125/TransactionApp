@@ -11,6 +11,7 @@ const canViewDashboard = requireRole([
   "member",
   "treasurer",
   "chairperson",
+  "secretary",
 ]);
 
 // GET /api/dashboard/overview
@@ -21,7 +22,7 @@ router.get("/overview", canViewDashboard, async (req, res, next) => {
     const userId = req.session.user.id;
     const role = String(req.session.user.role || "").toLowerCase();
 
-    if (role === "member") {
+    if (role === "member" || role === "secretary") {
       const result = await query(
         `SELECT
            COUNT(*) FILTER (
@@ -62,7 +63,7 @@ router.get("/overview", canViewDashboard, async (req, res, next) => {
       return res.status(200).json({
         success: true,
         dashboard: {
-          role: "member",
+          role,
           ...result.rows[0],
         },
       });

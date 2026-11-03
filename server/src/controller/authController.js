@@ -155,7 +155,8 @@ async function resetPassword(req, res, next) {
     await passwordRecoveryService.resetPassword(
       req.body.email,
       req.body.code,
-      req.body.newPassword
+      req.body.newPassword,
+      req.body.username
     );
 
     return res.status(200).json({

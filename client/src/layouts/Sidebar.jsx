@@ -11,6 +11,7 @@ import {
   ContactRound,
   Wallet,
   ShieldCheck,
+  ClipboardCheck,
   LogOut,
 } from 'lucide-react'
 import ProfileAvatar from '../components/ProfileAvatar.jsx'
@@ -26,6 +27,7 @@ const navigationItems = [
   { key: 'minutes', label: 'Meeting Minutes', icon: ClipboardList },
   { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'technicalAdmin', label: 'Technical Administration', icon: ShieldCheck },
+  { key: 'auditLog', label: 'Audit Log Report', icon: ClipboardCheck },
   { key: 'account', label: 'My Account', icon: Wallet },
   { key: 'profile', label: 'Profile', icon: ContactRound },
 ]
@@ -68,6 +70,8 @@ const roleNavigation = {
     'profile',
   ],
   secretary: [
+    'dashboard',
+    'transactions',
     'members',
     'groupRules',
     'meetings',
@@ -78,6 +82,7 @@ const roleNavigation = {
   ],
   technical_admin: [
     'technicalAdmin',
+    'auditLog',
     'notifications',
     'account',
     'profile',

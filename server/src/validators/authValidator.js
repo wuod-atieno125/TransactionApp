@@ -146,7 +146,8 @@ function validateResetPassword(body) {
   const unknown = rejectUnknownFields(body, [
     "email",
     "code",
-    "newPassword"
+    "newPassword",
+    "username",
   ]);
 
   if (unknown) return unknown;
@@ -184,6 +185,14 @@ function validateResetPassword(body) {
     !/[^A-Za-z0-9\s]/.test(password)
   ) {
     return "New password must include a letter, a number, and a special character.";
+  }
+
+  if (
+    body.username !== undefined &&
+    (typeof body.username !== "string" ||
+      !/^[a-zA-Z0-9_]{3,30}$/.test(body.username.trim()))
+  ) {
+    return "Username must be 3 to 30 characters using letters, numbers, or underscores.";
   }
 
   return null;
