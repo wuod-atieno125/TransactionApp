@@ -57,7 +57,6 @@ export default function App() {
   const [page, setPage] = useState('dashboard')
   const [checkingSession, setCheckingSession] = useState(true)
   const [appError, setAppError] = useState('')
-  const [authNotice, setAuthNotice] = useState('')
   const [recoveryEmail, setRecoveryEmail] = useState('')
   const [verifiedRecoveryCode, setVerifiedRecoveryCode] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
@@ -90,7 +89,6 @@ export default function App() {
     setUser(signedInUser)
     setPage(defaultPageFor(signedInUser))
     setAppError('')
-    setAuthNotice('')
   }
 
   async function handleLogout() {
@@ -102,7 +100,6 @@ export default function App() {
       setUser(null)
       setPage('dashboard')
       setAuthPage('landing')
-      setAuthNotice('You’re safely signed out. See you again soon.')
     } catch (error) {
       setAppError(error.message || 'Unable to sign out. Please try again.')
     } finally {
@@ -130,7 +127,6 @@ export default function App() {
     setUser(null)
     setPage('dashboard')
     setAuthPage('login')
-    setAuthNotice('Your session has ended for your security. Please sign in again.')
   }
 
   function handleAccountUpdated(account) {
@@ -182,7 +178,6 @@ export default function App() {
         <LandingPage
           onLogin={() => setAuthPage('login')}
           onRegister={() => setAuthPage('register')}
-          notice={authNotice}
         />
       )
     }

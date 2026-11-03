@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-const IDLE_TIMEOUT_MS = 20 * 60 * 1000
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000
 const WARNING_LEAD_MS = 2 * 60 * 1000
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'mousemove']
 
 export default function SessionTimeout({ userId, onExtend, onLogout, onExpire, loggingOut = false }) {
-  const lastActivityRef = useRef(Date.now())
+  const lastActivityRef = useRef(null)
   const warningRef = useRef(false)
   const callbacksRef = useRef({ onExtend, onExpire })
   const [warning, setWarning] = useState(false)
@@ -13,7 +13,9 @@ export default function SessionTimeout({ userId, onExtend, onLogout, onExpire, l
   const [extending, setExtending] = useState(false)
   const [error, setError] = useState('')
 
-  callbacksRef.current = { onExtend, onExpire }
+  useEffect(() => {
+    callbacksRef.current = { onExtend, onExpire }
+  }, [onExtend, onExpire])
 
   useEffect(() => {
     lastActivityRef.current = Date.now()
@@ -39,8 +41,13 @@ export default function SessionTimeout({ userId, onExtend, onLogout, onExpire, l
     }
 
     function recordActivity() {
-      if (expired || warningRef.current) return
+      if (expired) return
       lastActivityRef.current = Date.now()
+      if (warningRef.current) {
+        warningRef.current = false
+        setWarning(false)
+        setRemainingSeconds(0)
+      }
     }
 
     const intervalId = window.setInterval(updateIdleState, 1000)

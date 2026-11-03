@@ -14,7 +14,7 @@ const { pool } = require("./config/database");
 const apiRoutes = require("./routes");
 
 const app = express();
-const SESSION_IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be configured");
