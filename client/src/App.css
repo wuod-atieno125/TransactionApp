@@ -1315,9 +1315,51 @@ footer span {
 }
 
 .auth-loading {
+  justify-items: center;
   align-content: center;
-  gap: 12px;
+  gap: 16px;
   color: var(--muted, #77817b);
+}
+
+.auth-loading__mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  background: var(--green, #2451dc);
+  font-size: 32px;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgb(36 81 220 / 20%);
+}
+
+.auth-loading__copy {
+  display: grid;
+  gap: 5px;
+  text-align: center;
+}
+
+.auth-loading__copy strong {
+  color: var(--ink, #17254b);
+  font-size: 16px;
+}
+
+.auth-loading__copy span {
+  font-size: 12px;
+}
+
+.auth-loading__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgb(36 81 220 / 18%);
+  border-top-color: var(--green, #2451dc);
+  border-radius: 50%;
+  animation: auth-loading-spin 800ms linear infinite;
+}
+
+@keyframes auth-loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 .topbar-actions,

@@ -165,9 +165,13 @@ export default function App() {
 
   if (checkingSession) {
     return (
-      <main className="auth-loading" aria-live="polite">
-        <span className="brand-mark">p</span>
-        <p>Checking your session…</p>
+      <main className="auth-loading" aria-live="polite" aria-busy="true">
+        <div className="auth-loading__mark" aria-hidden="true">p</div>
+        <div className="auth-loading__copy">
+          <strong>Preparing your workspace</strong>
+          <span>One moment while we get things ready.</span>
+        </div>
+        <span className="auth-loading__spinner" aria-hidden="true" />
       </main>
     )
   }
