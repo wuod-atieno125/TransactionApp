@@ -10,6 +10,7 @@ import ReportsPage from '../modules/reports/pages/ReportsPage.jsx'
 import SettingsPage from '../modules/members/pages/SettingsPage.jsx'
 import TechnicalAdminPage from '../modules/technical-administration/pages/TechnicalAdminPage.jsx'
 import WelfareTransactionsPage from '../modules/welfare/pages/WelfareContributions.jsx'
+import FinesPage from "../modules/fines/pages/FinesPage.jsx";
 
 export const moduleRegistry = {
   dashboard: DashboardPage,
@@ -24,4 +25,5 @@ export const moduleRegistry = {
   notifications: NotificationsPage,
   technicalAdmin: TechnicalAdminPage,
   auditLog: AuditLogPage,
+  fines: FinesPage,
 }

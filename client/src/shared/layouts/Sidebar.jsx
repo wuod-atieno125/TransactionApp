@@ -11,12 +11,18 @@ import {
   ClipboardCheck,
   LogOut,
   Wallet,
+  Receipt,
 } from 'lucide-react'
 import ProfileAvatar from '../../modules/members/components/ProfileAvatar.jsx'
 
 const navigationItems = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'welfareContributions', label: 'Welfare', icon: Wallet },
+  {
+  key: "fines",
+  label: "Fine Management",
+  icon: Receipt,
+},
   { key: 'members', label: 'Members', icon: Users },
   { key: 'approvals', label: 'Member Approvals', icon: UserCheck },
   { key: 'reports', label: 'Reports', icon: ChartNoAxesCombined },
@@ -32,6 +38,7 @@ const roleNavigation = {
   member: [
     'dashboard',
     'welfareContributions',
+    'fines',
     'members',
     'groupRules',
     'meetings',
@@ -41,6 +48,7 @@ const roleNavigation = {
   treasurer: [
     'dashboard',
     'welfareContributions',
+    'fines',
     'members',
     'reports',
     'groupRules',
@@ -51,6 +59,7 @@ const roleNavigation = {
   chairperson: [
     'dashboard',
     'welfareContributions',
+    'fines',
     'members',
     'approvals',
     'reports',
@@ -62,6 +71,7 @@ const roleNavigation = {
   secretary: [
     'dashboard',
     'welfareContributions',
+    'fines',
     'members',
     'groupRules',
     'meetings',

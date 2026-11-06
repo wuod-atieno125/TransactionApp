@@ -5469,7 +5469,7 @@ footer {
 .auth-screen--register {
   background-image:
     linear-gradient(rgb(8 18 15 / 48%), rgb(8 18 15 / 58%)),
-    url('./assets/espacio.jpeg');
+    url('../assets/espacio.jpeg');
   background-attachment: fixed;
   background-position: center center;
   background-size: cover;
@@ -5478,7 +5478,7 @@ footer {
 .auth-screen--register .auth-visual {
   background:
     linear-gradient(rgb(8 18 15 / 54%), rgb(8 18 15 / 72%)),
-    url('./assets/espacio.jpeg') center center / cover no-repeat;
+    url('../assets/espacio.jpeg') center center / cover no-repeat;
   background-attachment: fixed;
 }
 
@@ -5553,13 +5553,13 @@ footer {
 .auth-screen--register {
   background-image:
     linear-gradient(rgb(8 18 15 / 30%), rgb(8 18 15 / 34%)),
-    url('./assets/espacio.jpeg');
+    url('../assets/espacio.jpeg');
 }
 
 .auth-screen--register .auth-visual {
   background:
     linear-gradient(rgb(8 18 15 / 30%), rgb(8 18 15 / 38%)),
-    url('./assets/espacio.jpeg') center center / cover no-repeat;
+    url('../assets/espacio.jpeg') center center / cover no-repeat;
 }
 
 .auth-card {

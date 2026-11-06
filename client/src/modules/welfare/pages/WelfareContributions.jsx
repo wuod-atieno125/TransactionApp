@@ -123,6 +123,7 @@ export default function WelfareTransactionsPage({ user }) {
   const canRecordPayment = role === 'treasurer'
   const canRequestOwnReversal = ['member', 'chairperson', 'secretary'].includes(role)
   const canViewFund = ['treasurer', 'chairperson', 'secretary'].includes(role)
+  const canViewCollectiveBalance = canViewFund || role === 'member'
   const canRequestWithdrawal = role === 'treasurer'
   const canApproveWithdrawal = role === 'chairperson'
   const canExecuteWithdrawal = role === 'treasurer'
@@ -213,9 +214,9 @@ export default function WelfareTransactionsPage({ user }) {
     let active = true
 
     Promise.allSettled([
-      getWelfareBalance(),
+      canViewCollectiveBalance ? getWelfareBalance() : Promise.resolve(null),
       getRequirements(),
-      getWelfareWithdrawals(),
+      canViewFund ? getWelfareWithdrawals() : Promise.resolve([]),
       user?.id ? getWelfareStatement(user.id) : Promise.resolve(null),
     ]).then(([balance, requirements, withdrawals, statement]) => {
       if (!active) return
@@ -238,7 +239,7 @@ export default function WelfareTransactionsPage({ user }) {
     return () => {
       active = false
     }
-  }, [canSetRequirement, user?.id])
+  }, [canSetRequirement, canViewCollectiveBalance, canViewFund, user?.id])
 
   useEffect(() => {
     let active = true
@@ -280,7 +281,9 @@ export default function WelfareTransactionsPage({ user }) {
 
   async function refreshWelfareData() {
     const [balance, requirements, withdrawals, statement] = await Promise.all([
-      canViewFund ? getWelfareBalance() : Promise.resolve(welfareOverview.balance),
+      canViewCollectiveBalance
+        ? getWelfareBalance()
+        : Promise.resolve(welfareOverview.balance),
       getRequirements(),
       canViewFund ? getWelfareWithdrawals() : Promise.resolve(welfareOverview.withdrawals),
       user?.id ? getWelfareStatement(user.id) : Promise.resolve(null),

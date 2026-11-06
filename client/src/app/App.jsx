@@ -12,7 +12,7 @@ import LandingPage from '../modules/authentication/pages/LandingPage.jsx'
 import SessionTimeout from '../shared/components/SessionTimeout.jsx'
 import useAutoDismiss from '../shared/hooks/useAutoDismiss.js'
 import { moduleRegistry } from './moduleRegistry.js'
-import { defaultPage, defaultPageFor, resolvePage } from './navigation/index.js'
+import { defaultPage, defaultPageFor } from './navigation/index.js'
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -216,18 +216,19 @@ if (authPage === 'set-new-password') {
   const permittedPages = {
     member: [
       'dashboard', 'welfareContributions', 'members', 'groupRules',
-      'meetings', 'minutes', 'notifications', 'settings',
+      'meetings', 'minutes', 'notifications', 'settings','fines',
     ],
     treasurer: [
       'dashboard', 'welfareContributions', 'members', 'reports', 'groupRules',
-      'meetings', 'minutes', 'notifications', 'settings',
+      'meetings', 'minutes', 'notifications', 'settings','fines',
     ],
     chairperson: [
       'dashboard', 'welfareContributions', 'members', 'approvals', 'reports',
-      'groupRules', 'meetings', 'minutes', 'notifications', 'settings',
+      'groupRules', 'meetings', 'minutes', 'notifications', 'settings','fines',
     ],
     secretary: [
       'dashboard', 'welfareContributions', 'members', 'groupRules', 'meetings', 'minutes',
+      'fines',
       'notifications', 'settings',
     ],
     technical_admin: [

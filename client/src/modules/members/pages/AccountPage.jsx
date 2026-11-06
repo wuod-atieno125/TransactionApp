@@ -33,13 +33,17 @@ export default function AccountPage({ user, onAccountUpdated, embedded = false }
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [deletionRequest, setDeletionRequest] = useState(null)
-  const [deletionStatusLoading, setDeletionStatusLoading] = useState(false)
+  const [deletionStatusLoading, setDeletionStatusLoading] = useState(
+    user?.role === 'member',
+  )
   const [deletionReason, setDeletionReason] = useState('')
   const [deletionSaving, setDeletionSaving] = useState(false)
   const [deletionError, setDeletionError] = useState('')
   const [deletionSuccess, setDeletionSuccess] = useState('')
   const [roleRemovalRequest, setRoleRemovalRequest] = useState(null)
-  const [roleRemovalLoading, setRoleRemovalLoading] = useState(false)
+  const [roleRemovalLoading, setRoleRemovalLoading] = useState(
+    ['chairperson', 'secretary', 'treasurer'].includes(user?.role),
+  )
   const [roleRemovalReason, setRoleRemovalReason] = useState('')
   const [roleRemovalSaving, setRoleRemovalSaving] = useState(false)
   const [roleRemovalError, setRoleRemovalError] = useState('')
@@ -125,7 +129,6 @@ export default function AccountPage({ user, onAccountUpdated, embedded = false }
     if (!isMember) return undefined
 
     let active = true
-    setDeletionStatusLoading(true)
     getMyDeletionRequest()
       .then(result => {
         if (active) setDeletionRequest(result)
@@ -146,7 +149,6 @@ export default function AccountPage({ user, onAccountUpdated, embedded = false }
     if (!isOfficial) return undefined
 
     let active = true
-    setRoleRemovalLoading(true)
     getMyRoleRemovalRequest()
       .then(result => {
         if (active) setRoleRemovalRequest(result)

@@ -143,7 +143,7 @@ export default function DashboardPage({ user, onNavigate }) {
   const [error, setError] = useState('')
   const [paymentDestination, setPaymentDestination] = useState(null)
   const [nextMeeting, setNextMeeting] = useState(null)
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(0)
 
   useAutoDismiss(error, setError)
 
@@ -217,7 +217,10 @@ export default function DashboardPage({ user, onNavigate }) {
     const refreshMeeting = () => {
       getNextMeeting()
         .then(payload => {
-          if (active) setNextMeeting(unwrapMeeting(payload))
+          if (active) {
+            setNow(Date.now())
+            setNextMeeting(unwrapMeeting(payload))
+          }
         })
         .catch(() => {
           if (active) setNextMeeting(null)

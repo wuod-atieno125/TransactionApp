@@ -94,12 +94,48 @@ export default function TechnicalAdminPage({ user: currentUser }) {
   }, [])
 
   useEffect(() => {
-    loadUsers()
-  }, [loadUsers])
+    let active = true
+
+    getTechnicalAdminUsers()
+      .then(result => {
+        if (!active) return
+        setUsers(result)
+        setSelectedRoles(
+          Object.fromEntries(result.map(user => [user.id, user.role])),
+        )
+      })
+      .catch(err => {
+        if (active) setError(err.message || 'Unable to load approved users.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
-    loadRoleRemovalRequests()
-  }, [loadRoleRemovalRequests])
+    let active = true
+
+    getRoleRemovalRequests()
+      .then(requests => {
+        if (active) setRoleRemovalRequests(requests)
+      })
+      .catch(err => {
+        if (active) {
+          setError(err.message || 'Unable to load official role-removal requests.')
+        }
+      })
+      .finally(() => {
+        if (active) setRoleRemovalLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   async function handleSave(user) {
     if (user.id === currentUser?.id) return
@@ -142,7 +178,10 @@ export default function TechnicalAdminPage({ user: currentUser }) {
       const result = await decideRoleRemovalRequest(request.id, decision)
       setRoleRemovalRequests(current => current.filter(item => item.id !== request.id))
       setNotice(result.message || 'Role-removal request reviewed.')
-      if (decision === 'approved') await loadUsers()
+      if (decision === 'approved') {
+        setLoading(true)
+        await loadUsers()
+      }
     } catch (err) {
       setError(err.message || 'Unable to review the role-removal request.')
     } finally {
@@ -214,7 +253,11 @@ export default function TechnicalAdminPage({ user: currentUser }) {
         <button
           type="button"
           className="button button-secondary technical-admin-refresh"
-          onClick={loadUsers}
+          onClick={() => {
+            setLoading(true)
+            setError('')
+            void loadUsers()
+          }}
           disabled={loading || Boolean(savingId) || Boolean(pendingRoleChange)}
         >
           <RefreshCw size={16} /> Refresh users
@@ -302,7 +345,11 @@ export default function TechnicalAdminPage({ user: currentUser }) {
           <button
             type="button"
             className="button button-secondary technical-admin-audit-refresh"
-            onClick={loadRoleRemovalRequests}
+            onClick={() => {
+              setRoleRemovalLoading(true)
+              setError('')
+              void loadRoleRemovalRequests()
+            }}
             disabled={roleRemovalLoading}
           >
             <RefreshCw size={15} />
