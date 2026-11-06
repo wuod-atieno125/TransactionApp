@@ -513,9 +513,6 @@ async function decideAccountDeletion(requestId, actorId, decision, reason) {
       [decision, actorId, reason, requestId]
     );
 
-    const notificationType = decision === "approved"
-      ? "member_deletion_approved"
-      : "member_deletion_rejected";
     const status = decision === "approved" ? "anonymized" : "approved";
 
     if (decision === "approved") {

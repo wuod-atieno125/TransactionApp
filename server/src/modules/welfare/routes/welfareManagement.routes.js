@@ -10,7 +10,7 @@ router.put("/requirements", requireRole("chairperson"), controller.setRequiremen
 router.get("/contributions", requireRole("member", "treasurer", "chairperson", "secretary"), controller.contributions);
 router.post("/contributions", requireRole("treasurer"), controller.recordContribution);
 router.get("/members/:memberId/statement", requireRole("member", "treasurer", "chairperson", "secretary"), controller.statement);
-router.get("/balance", requireRole("treasurer", "chairperson", "secretary"), controller.balance);
+router.get("/balance", requireRole("member", "treasurer", "chairperson", "secretary"), controller.balance);
 router.post("/withdrawals", requireRole("treasurer"), controller.requestWithdrawal);
 router.get("/withdrawals/export", requireRole("treasurer"), controller.withdrawalExport);
 router.get("/withdrawals", requireRole("treasurer", "chairperson", "secretary"), controller.withdrawals);

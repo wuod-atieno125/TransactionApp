@@ -27,32 +27,6 @@ const loginLimiter = rateLimit({
 
 const SESSION_COOKIE = "transaction.sid";
 
-const ALLOWED_STATUSES = new Set(["approved"]);
-
-function normalizeIdentifier(value) {
-  const identifier = String(value || "").trim();
-
-  if (identifier.includes("@")) {
-    return { email: identifier.toLowerCase(), phone: null };
-  }
-
-  // Preserve a leading + for international phone numbers.
-  const phone = identifier.replace(/[^\d+]/g, "");
-
-  return {
-    email: null,
-    phone: phone || null,
-  };
-}
-
-function publicUser(user) {
-  return {
-    id: user.id,
-    fullName: user.full_name,
-    role: user.role,
-  };
-}
-
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,

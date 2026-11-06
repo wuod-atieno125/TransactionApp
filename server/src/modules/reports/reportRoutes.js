@@ -37,12 +37,6 @@ function isSunday(value) {
   return new Date(`${value}T00:00:00Z`).getUTCDay() === 0;
 }
 
-// Convert a Nairobi-local date to its UTC instant.
-// Nairobi is UTC+03:00 and does not observe daylight saving time.
-function nairobiMidnightUtc(date) {
-  return `${date}T00:00:00+03:00`;
-}
-
 // GET /api/reports/monthly?month=YYYY-MM
 router.get("/monthly", canViewReports, async (req, res, next) => {
   try {

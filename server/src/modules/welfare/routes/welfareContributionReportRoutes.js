@@ -1,11 +1,9 @@
 const express = require("express");
-const { query, pool } = require("../../../config/database");
+const { query } = require("../../../config/database");
 const { requireAuth, requireRole } = require("../../../shared/middleware/auth");
 
 
 const router = express.Router();
-const MEMBER_REVERSAL_WINDOW_MINUTES = 15;
-
 function getPagination(queryParams) {
   const parseIntegerParam = (value) => {
     if (value === undefined || value === "") {
@@ -77,70 +75,6 @@ function isValidDateRange(startDate, endDate, maxDays = 366) {
     end >= start &&
     end - start < maxDays
   );
-}
-
-async function reverseTransaction(client, {
-  transaction,
-  actorUserId,
-  reason,
-  approvalRequestId = null,
-  excludedMemberUserId = null,
-}) {
-  const result = await client.query(
-    `UPDATE transactions
-     SET status = 'reversed',
-         updated_by = $1,
-         updated_at = NOW()
-     WHERE id = $2
-       AND status = 'active'
-     RETURNING *`,
-    [actorUserId, transaction.id]
-  );
-  const reversedTransaction = result.rows[0];
-
-  if (!reversedTransaction) {
-    const error = new Error("Active transaction not found.");
-    error.statusCode = 404;
-    throw error;
-  }
-
-  await client.query(
-    `INSERT INTO audit_logs (
-       actor_user_id, action, target_type, target_id,
-       old_values, new_values
-     )
-     VALUES ($1, 'transaction_reversed', 'transaction', $2, $3::jsonb, $4::jsonb)`,
-    [
-      actorUserId,
-      transaction.id,
-      JSON.stringify(transaction),
-      JSON.stringify({
-        ...reversedTransaction,
-        reversal_reason: reason,
-        reversal_approval_request_id: approvalRequestId,
-      }),
-    ]
-  );
-
-  await client.query(
-    `INSERT INTO notifications (
-       recipient_user_id, transaction_id, event_type, title, message
-     )
-     SELECT id, $1, 'transaction_updated',
-            'Contribution reversal completed',
-            'A contribution reversal was approved and completed.'
-     FROM users
-     WHERE role = 'member'
-       AND account_status = 'approved'
-       AND deleted_at IS NULL
-       AND ($2::uuid IS NULL OR id <> $2)`,
-    [
-      transaction.id,
-      excludedMemberUserId,
-    ]
-  );
-
-  return reversedTransaction;
 }
 
 // GET /api/transactions/reversed

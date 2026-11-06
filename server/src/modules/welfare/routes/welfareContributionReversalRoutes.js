@@ -39,44 +39,6 @@ function getPagination(queryParams) {
     offset: parsedOffset === null ? 0 : parsedOffset,
   };
 }
-function isValidDateRange(startDate, endDate, maxDays = 366) {
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
-  if (
-    typeof startDate !== "string" ||
-    typeof endDate !== "string" ||
-    !datePattern.test(startDate) ||
-    !datePattern.test(endDate)
-  ) {
-    return false;
-  }
-
-  function toUtcDay(value) {
-    const [year, month, day] = value.split("-").map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day));
-
-    if (
-      date.getUTCFullYear() !== year ||
-      date.getUTCMonth() !== month - 1 ||
-      date.getUTCDate() !== day
-    ) {
-      return null;
-    }
-
-    return Math.floor(date.getTime() / 86400000);
-  }
-
-  const start = toUtcDay(startDate);
-  const end = toUtcDay(endDate);
-
-  return (
-    start !== null &&
-    end !== null &&
-    end >= start &&
-    end - start < maxDays
-  );
-}
-
 async function reverseTransaction(client, {
   transaction,
   actorUserId,
