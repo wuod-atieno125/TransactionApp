@@ -15,7 +15,7 @@ require("dotenv").config({
 const bcrypt = require("bcryptjs");
 const readline = require("readline");
 const { pool } = require("../config/database");
-const { isTechnicalAdminPassword } = require("../utils/passwordPolicy");
+const { isTechnicalAdminPassword } = require("../shared/utilities/passwordPolicy");
 
 const CONFIRMATION_FLAG = "--confirm-initial-technical-admin";
 const LOCK_KEY = "gcms_initial_technical_admin_bootstrap";

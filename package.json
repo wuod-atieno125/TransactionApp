@@ -1,0 +1,23 @@
+{
+  "name": "patumas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pamoja Tuinuane Management System",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "client:dev": "npm run dev --workspace=client",
+    "server:dev": "npm run dev --workspace=server",
+    "client:build": "npm run build --workspace=client",
+    "client:lint": "npm run lint --workspace=client",
+    "db:migrate": "npm run db:migrate --workspace=server",
+    "seed:admin": "npm run seed:admin --workspace=server",
+    "seed:technical-admin": "npm run seed:technical-admin --workspace=server"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

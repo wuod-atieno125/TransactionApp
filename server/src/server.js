@@ -14,10 +14,10 @@ async function startServer() {
     await pool.query("SELECT 1");
 
     app.listen(PORT, () => {
-      console.log(`GCMS API running on port ${PORT}`);
+      console.log(`PATUMAS API running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to start GCMS API:", error);
+    console.error("Failed to start PATUMAS API:", error);
     await pool.end();
     process.exit(1);
   }

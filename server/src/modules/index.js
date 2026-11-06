@@ -1,0 +1,42 @@
+const express = require("express");
+const router = express.Router();
+
+const authRoutes = require("./authentication/authRoutes");
+const adminRoutes = require("./approvals/adminRoutes");
+const memberRoutes = require("./members/memberRoutes");
+const welfareRoutes = require("./welfare");
+const transactionNotificationRoutes = require("./notifications/transactionNotificationRoutes");
+const healthRoutes = require("./health/healthRoutes");
+const dashboardRoutes = require("./dashboard/dashboardRoutes");
+const reportRoutes = require("./reports/reportRoutes");
+const notificationRoutes = require("./notifications/notificationRoutes");
+const groupRulesRoutes = require("./group-rules/groupRulesRoutes");
+const meetingRoutes = require("./meetings/meetingRoutes");
+const meetingMinutesRoutes = require("./meetings/meetingMinutesRoutes");
+const auditRoutes = require("./audit/auditRoutes");
+const groupMembershipRoutes = require("./group-management/groupMembershipRoutes");
+const settingsRoutes = require("./group-management/settingsRoutes");
+const technicalAdminRoutes = require("./technical-administration/technicalAdminRoutes");
+const paymentDestinationRoutes = require("./group-management/paymentDestinationRoutes");
+
+router.use("/auth", authRoutes);
+router.use("/admin", adminRoutes);
+router.use("/members", memberRoutes);
+router.use("/welfare-contributions", welfareRoutes);
+router.use("/welfare", welfareRoutes);
+router.use("/transactions", welfareRoutes);
+router.use("/transactions", transactionNotificationRoutes);
+router.use("/health", healthRoutes);
+router.use("/dashboard", dashboardRoutes);
+router.use("/reports", reportRoutes);
+router.use("/notifications", notificationRoutes);
+router.use("/group-rules", groupRulesRoutes);
+router.use("/meetings", meetingRoutes);
+router.use("/meeting-minutes", meetingMinutesRoutes);
+router.use("/audit", auditRoutes);
+router.use("/group-memberships", groupMembershipRoutes);
+router.use("/settings", settingsRoutes);
+router.use("/technical-admin", technicalAdminRoutes);
+router.use("/payment-destination", paymentDestinationRoutes);
+
+module.exports = router;

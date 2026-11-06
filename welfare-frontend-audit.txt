@@ -1,0 +1,685 @@
+
+
+========== FILE: client/src/modules/welfare/index.js ==========
+export { default as WelfareContributions } from './pages/WelfareContributions.jsx'
+export { default as welfareApi } from './services/welfareApi.jsx'
+
+
+========== FILE: client/src/modules/welfare/pages/WelfareContributions.jsx ==========
+import { useEffect, useMemo, useState } from 'react'
+import PageHeader from '../../../shared/components/PageHeader.jsx'
+import TransactionTable from '../../transactions/components/TransactionTable.jsx'
+import {
+  createTransaction,
+  decideTransactionReversal,
+  getTransactionReversalRequests,
+  getTransactions,
+  reverseTransaction,
+} from '../../transactions/services/transactionService.js'
+import { formatCurrency } from '../../../shared/utils/formatCurrency.js'
+import { getMembers } from '../../members/services/memberService.js'
+import useAutoDismiss from '../../../shared/hooks/useAutoDismiss.js'
+
+export default function WelfareTransactionsPage({ user }) {
+  const [search, setSearch] = useState('')
+  const [transactions, setTransactions] = useState([])
+  const [reversalRequests, setReversalRequests] = useState([])
+  const [members, setMembers] = useState([])
+  const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [amount, setAmount] = useState('')
+  const [mpesaReference, setMpesaReference] = useState('')
+  const [transactionToReverse, setTransactionToReverse] = useState(null)
+  const [reversalReason, setReversalReason] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [reversalRequestsLoading, setReversalRequestsLoading] = useState(true)
+  const [reversalBusyId, setReversalBusyId] = useState('')
+  const [reversalBusyAction, setReversalBusyAction] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [reversing, setReversing] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useAutoDismiss(error, setError)
+  useAutoDismiss(success, setSuccess)
+
+  const role = String(user?.role || '').toLowerCase().replace(/\s+/g, '')
+  const canRecordPayment = role === 'treasurer'
+  const isMember = role === 'member'
+  const reversalApprovalRequired = isMember || canRecordPayment
+  const reversalReasonRequired = reversalApprovalRequired
+
+  async function reloadTransactions() {
+    const result = await getTransactions({ limit: 100 })
+    setTransactions(result.transactions)
+  }
+
+  useEffect(() => {
+    let active = true
+
+    getTransactions({ limit: 100 })
+      .then(result => {
+        if (active) setTransactions(result.transactions)
+      })
+      .catch(requestError => {
+        if (active) setError(requestError.message || 'Unable to load welfare transaction records.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    if (canRecordPayment) {
+      getMembers()
+        .then(result => {
+          if (active) setMembers(result)
+        })
+        .catch(requestError => {
+          if (active) setError(requestError.message || 'Unable to load approved members.')
+        })
+        .finally(() => {
+          if (active) setMembersLoading(false)
+        })
+
+      getTransactionReversalRequests()
+        .then(result => {
+          if (active) setReversalRequests(result)
+        })
+        .catch(requestError => {
+          if (active) {
+            setError(requestError.message || 'Unable to load member reversal requests.')
+          }
+        })
+        .finally(() => {
+          if (active) setReversalRequestsLoading(false)
+        })
+    }
+
+    return () => {
+      active = false
+    }
+  }, [canRecordPayment])
+
+  async function handleRecordPayment(event) {
+    event.preventDefault()
+    setError('')
+    setSuccess('')
+
+    const member = members.find(item => item.id === selectedMemberId)
+    if (!member) {
+      setError('Select an approved member to record this welfare contribution.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createTransaction({
+        memberUserId: member.id,
+        enteredMemberName: member.fullName,
+        amount: Number(amount),
+        mpesaReference: mpesaReference.trim(),
+      })
+      await reloadTransactions()
+      setSelectedMemberId('')
+      setAmount('')
+      setMpesaReference('')
+      setSuccess('Payment recorded. The date and received status were added automatically.')
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to record welfare contribution.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function openReversal(transaction) {
+    setError('')
+    setSuccess('')
+    setReversalReason('')
+    setTransactionToReverse(transaction)
+  }
+
+  async function handleReverseTransaction(event) {
+    event.preventDefault()
+    if (!transactionToReverse) return
+
+    setError('')
+    setSuccess('')
+    setReversing(true)
+
+    try {
+      const result = await reverseTransaction(transactionToReverse.id, reversalReason.trim())
+      await reloadTransactions()
+      setTransactionToReverse(null)
+      setReversalReason('')
+      setSuccess(result.message || 'Welfare transaction reversal completed.')
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to reverse this welfare transaction.')
+    } finally {
+      setReversing(false)
+    }
+  }
+
+  async function decideMemberReversalRequest(request, decision) {
+    setReversalBusyId(request.id)
+    setReversalBusyAction(decision)
+    setError('')
+    setSuccess('')
+
+    try {
+      const result = await decideTransactionReversal(request.id, decision)
+      setReversalRequests(current => current.filter(item => item.id !== request.id))
+      await reloadTransactions()
+      setSuccess(result.message || 'Member reversal request reviewed.')
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to review the welfare reversal request.')
+    } finally {
+      setReversalBusyId('')
+      setReversalBusyAction('')
+    }
+  }
+
+  const results = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return transactions
+
+    return transactions.filter(transaction =>
+      `${transaction.entered_member_name || ''} ${transaction.mpesa_reference || ''}`
+        .toLowerCase()
+        .includes(term),
+    )
+  }, [search, transactions])
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="WELFARE RECORDS"
+        title="Welfare transaction records"
+        description="Every welfare contribution received, recorded in one place."
+      />
+      {canRecordPayment && (
+        <section className="content-card payment-entry-card">
+          <div className="card-heading">
+            <div>
+              <h2>Record a welfare contribution</h2>
+              <p>Select an approved member and enter the welfare contribution details.</p>
+            </div>
+          </div>
+
+          {error && !transactionToReverse && <p className="app-error" role="alert">{error}</p>}
+          {success && <p className="account-success" role="status">{success}</p>}
+
+          <form className="account-form payment-entry-form" onSubmit={handleRecordPayment}>
+            <label htmlFor="payment-member">
+              Approved member
+              <select
+                id="payment-member"
+                value={selectedMemberId}
+                onChange={event => setSelectedMemberId(event.target.value)}
+                required
+                disabled={membersLoading || members.length === 0}
+              >
+                <option value="">
+                  {membersLoading ? 'Loading approved members…' : 'Select a member'}
+                </option>
+                {members.map(member => (
+                  <option key={member.id} value={member.id}>{member.fullName}</option>
+                ))}
+              </select>
+              {!membersLoading && members.length === 0 && (
+                <small>No approved members are available to select.</small>
+              )}
+            </label>
+
+            <label htmlFor="payment-amount">
+              Amount (KES)
+              <input
+                id="payment-amount"
+                type="number"
+                min="0.01"
+                max="9999999999.99"
+                step="0.01"
+                value={amount}
+                onChange={event => setAmount(event.target.value)}
+                required
+              />
+            </label>
+
+            <label htmlFor="payment-mpesa-reference">
+              M-Pesa code
+              <input
+                id="payment-mpesa-reference"
+                type="text"
+                maxLength={100}
+                value={mpesaReference}
+                onChange={event => setMpesaReference(event.target.value)}
+                required
+              />
+            </label>
+
+            <p className="payment-entry-meta">
+              Payment date is recorded automatically. Status is set to Received by the server.
+            </p>
+
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={saving || membersLoading || members.length === 0}
+            >
+              {saving ? 'Recording welfare contribution…' : 'Record welfare contribution'}
+            </button>
+          </form>
+        </section>
+      )}
+      {canRecordPayment && (
+        <section className="content-card">
+          <div className="card-heading">
+            <div>
+              <h2>Member reversal requests</h2>
+              <p>Review the member’s reason. Welfare reversal requests and approvals are available for 12 hours after the record is created.</p>
+            </div>
+          </div>
+          {reversalRequestsLoading ? (
+            <p>Loading member reversal requests…</p>
+          ) : reversalRequests.length === 0 ? (
+            <p className="empty-state">There are no pending member reversal requests.</p>
+          ) : (
+            <section className="approval-grid">
+              {reversalRequests.map(request => (
+                <article className="content-card approval-card" key={request.id}>
+                  <b>{request.requested_by_name} requested a reversal</b>
+                  <p>
+                    {request.entered_member_name} · {formatCurrency(request.amount)}
+                    {request.mpesa_reference ? ` · ${request.mpesa_reference}` : ''}
+                  </p>
+                  <div className="deletion-request-reason">
+                    <span>MEMBER’S REASON</span>
+                    <p>{request.reason}</p>
+                  </div>
+                  <div className="approval-actions">
+                    {request.reversal_allowed === false && (
+                      <p className="transaction-action-muted">
+                        Reversal window expired after 12 hours.
+                      </p>
+                    )}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={request.reversal_allowed === false || reversalBusyId === request.id}
+                      onClick={() => decideMemberReversalRequest(request, 'rejected')}
+                    >
+                      {reversalBusyId === request.id && reversalBusyAction === 'rejected' ? 'Rejecting…' : 'Reject'}
+                    </button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={request.reversal_allowed === false || reversalBusyId === request.id}
+                      onClick={() => decideMemberReversalRequest(request, 'approved')}
+                    >
+                      {reversalBusyId === request.id && reversalBusyAction === 'approved'
+                        ? 'Approving…'
+                        : request.approval_required ? 'Approve and forward' : 'Approve reversal'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
+        </section>
+      )}
+      <section className="content-card">
+        <div className="toolbar">
+          <input
+            aria-label="Search welfare transaction records"
+            placeholder="Search member or M-Pesa code"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+          />
+        </div>
+        {!canRecordPayment && error && <p className="app-error" role="alert">{error}</p>}
+        {loading ? <p>Loading welfare transaction records…</p> : (
+          <TransactionTable
+            rows={results}
+            canReverse={canRecordPayment}
+            canRequestReversal={isMember}
+            onReverse={openReversal}
+          />
+        )}
+      </section>
+      {transactionToReverse && (
+        <div className="transaction-reversal-backdrop">
+          <section
+            className="transaction-reversal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transaction-reversal-title"
+          >
+            <h2 id="transaction-reversal-title">
+              {isMember
+                ? 'Request welfare transaction reversal'
+                : reversalApprovalRequired ? 'Request welfare reversal approval' : 'Reverse welfare transaction'}
+            </h2>
+            <p>
+              {isMember
+                ? 'Your request and reason will be sent to the treasurer for review.'
+                : reversalApprovalRequired
+                ? `Request approval to reverse the welfare contribution recorded for ${transactionToReverse.entered_member_name}. Requests and approvals are available for 12 hours after recording.`
+                : `Request approval to reverse the welfare contribution recorded for ${transactionToReverse.entered_member_name}? This action will be recorded in the audit log.`}
+            </p>
+            {reversalReasonRequired && <p className="password-change-hint">Enter a reason of at least 5 characters.</p>}
+            {error && <p className="app-error" role="alert">{error}</p>}
+            <form onSubmit={handleReverseTransaction}>
+              <label htmlFor="transaction-reversal-reason">
+                {isMember
+                  ? 'Reason for reversal request'
+                  : reversalApprovalRequired
+                    ? 'Reason for approval request'
+                    : 'Reason for reversal (optional)'}
+                <textarea
+                  id="transaction-reversal-reason"
+                  value={reversalReason}
+                  onChange={event => setReversalReason(event.target.value)}
+                  minLength={reversalReasonRequired ? 5 : undefined}
+                  maxLength={1000}
+                  rows={4}
+                  required={reversalReasonRequired}
+                />
+              </label>
+              <div className="transaction-reversal-actions">
+                <button
+                  className="feature-button"
+                  type="button"
+                  onClick={() => setTransactionToReverse(null)}
+                  disabled={reversing}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="transaction-reverse-button"
+                  type="submit"
+                  disabled={reversing || (reversalReasonRequired && reversalReason.trim().length < 5)}
+                >
+                  {reversing
+                    ? reversalApprovalRequired ? 'Sending request…' : 'Reversing…'
+                    : reversalApprovalRequired ? 'Send approval request' : 'Confirm reversal'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+
+========== FILE: client/src/modules/welfare/services/welfareApi.jsx ==========
+import { apiRequest } from '../../../shared/services/apiClient.js'
+
+export async function getRequirements() {
+  const result = await apiRequest('/welfare-contributions/requirements')
+  return result.requirements || []
+}
+
+export async function setRequirement(details) {
+  const result = await apiRequest('/welfare-contributions/requirements', {
+    method: 'PUT',
+    body: JSON.stringify(details),
+  })
+  return result.requirement
+}
+
+export async function recordWelfareContribution(details) {
+  const result = await apiRequest('/welfare-contributions/contributions', {
+    method: 'POST',
+    body: JSON.stringify(details),
+  })
+  return result.entry
+}
+
+export async function getWelfareStatement(memberId) {
+  const result = await apiRequest(`/welfare-contributions/members/${encodeURIComponent(memberId)}/statement`)
+  return result.statement
+}
+
+export async function getWelfareBalance() {
+  const result = await apiRequest('/welfare-contributions/balance')
+  return result.balance
+}
+
+export async function getWelfareWithdrawals() {
+  const result = await apiRequest('/welfare-contributions/withdrawals')
+  return result.withdrawals || []
+}
+
+export async function requestWelfareWithdrawal(details) {
+  const result = await apiRequest('/welfare-contributions/withdrawals', {
+    method: 'POST',
+    body: JSON.stringify(details),
+  })
+  return result.request
+}
+
+export async function decideWelfareWithdrawal(id, approved, reason) {
+  const result = await apiRequest(`/welfare-contributions/withdrawals/${encodeURIComponent(id)}/decision`, {
+    method: 'PATCH',
+    body: JSON.stringify({ approved, reason }),
+  })
+  return result.request
+}
+
+export async function executeWelfareWithdrawal(id) {
+  const result = await apiRequest(`/welfare-contributions/withdrawals/${encodeURIComponent(id)}/execute`, {
+    method: 'POST',
+  })
+  return result.request
+}
+
+
+========== FILE: client/src/modules/transactions/services/transactionService.js ==========
+import { apiRequest } from '../../../shared/services/apiClient.js'
+
+export async function getTransactions(params = {}) {
+  const query = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value))
+    }
+  }
+
+  const suffix = query.toString() ? `?${query}` : ''
+  const result = await apiRequest(`/welfare-contributions/contributions${suffix}`)
+
+  return {
+    transactions: Array.isArray(result.transactions)
+      ? result.transactions
+      : [],
+    pagination: result.pagination ?? null,
+  }
+} 
+
+export async function createTransaction(details) {
+  const result = await apiRequest('/welfare-contributions/contributions', {
+    method: 'POST',
+    body: JSON.stringify(details),
+  })
+
+  return result.transaction || result.entry
+}
+
+export async function reverseTransaction(id, reason) {
+  const result = await apiRequest(`/transactions/${encodeURIComponent(id)}/reverse`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  })
+
+  return result
+}
+
+export async function getTransactionReversalRequests() {
+  const result = await apiRequest('/transactions/reversal-requests')
+  return Array.isArray(result.requests) ? result.requests : []
+}
+
+export async function decideTransactionReversal(requestId, decision, reason) {
+  return apiRequest(`/transactions/reversal-requests/${encodeURIComponent(requestId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ decision, reason }),
+  })
+}
+
+export async function getWeeklyGroupReport(weekStart) {
+  const query = new URLSearchParams({ weekStart })
+  const result = await apiRequest(`/transactions/weekly-report?${query}`)
+  return result.weeklyReport
+}
+
+export async function getWeeklyMemberReport(weekStart) {
+  const query = new URLSearchParams({ weekStart })
+  const result = await apiRequest(`/transactions/weekly-report/members?${query}`)
+  return result.weeklyReport
+}
+
+
+========== FILE: client/src/modules/transactions/components/TransactionTable.jsx ==========
+import { useEffect, useState } from 'react'
+import Avatar from '../../../shared/components/ui/Avatar.jsx'
+import StatusBadge from '../../../shared/components/ui/StatusBadge.jsx'
+import { formatCurrency } from '../../../shared/utils/formatCurrency.js'
+
+export default function TransactionTable({
+  rows,
+  canReverse = false,
+  canRequestReversal = false,
+  onReverse,
+}) {
+  const [now, setNow] = useState(() => Date.now())
+  const showAction = canReverse || canRequestReversal
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  return <div className="table-wrap"><table><thead><tr><th>MEMBER</th><th>M-PESA CODE</th><th>DATE</th><th>AMOUNT</th><th>STATUS</th>{showAction && <th>ACTION</th>}</tr></thead><tbody>
+    {rows.map(row => {
+      const name = row.entered_member_name || row.name || 'Unknown member'
+      const reference = row.mpesa_reference || row.reference || '—'
+      const paidAt = row.paid_at || row.date
+      const date = paidAt
+        ? new Intl.DateTimeFormat('en-KE', { dateStyle: 'medium' }).format(new Date(paidAt))
+        : '—'
+      const status = row.status === 'reversed' ? 'Reversed' : 'Received'
+      const reversalRequestStatus = row.reversal_request_status
+      const reversalStatus = {
+        pending: 'Submitted',
+        pending_treasurer: 'Submitted',
+        pending_chairperson: 'Under review',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      }[reversalRequestStatus]
+      const reversalTone = reversalRequestStatus === 'rejected'
+        ? 'danger'
+        : reversalRequestStatus === 'pending' ||
+            reversalRequestStatus === 'pending_treasurer' ||
+            reversalRequestStatus === 'pending_chairperson'
+          ? 'warning'
+          : 'success'
+      const requestPending = reversalRequestStatus === 'pending' ||
+        reversalRequestStatus === 'pending_treasurer' ||
+        reversalRequestStatus === 'pending_chairperson'
+      const reversalExpired = (
+        row.reversal_allowed === false ||
+        (row.created_at &&
+          now >= new Date(row.created_at).getTime() + 12 * 60 * 60 * 1000)
+      )
+
+      return (
+        <tr key={row.id || reference}>
+          <td><span className="person-cell"><Avatar name={name}/>{name}</span></td>
+          <td><code>{reference}</code></td>
+          <td>{date}</td>
+          <td className="amount">{formatCurrency(row.amount)}</td>
+          <td>
+            <StatusBadge tone={status === 'Reversed' ? 'danger' : 'success'}>{status}</StatusBadge>
+            {reversalStatus && (
+              <div className="transaction-reversal-status">
+                <StatusBadge tone={reversalTone}>{reversalStatus}</StatusBadge>
+              </div>
+            )}
+          </td>
+          {showAction && (
+            <td>
+              {row.status === 'active' && !requestPending ? (
+                <button
+                  className="transaction-reverse-button"
+                  type="button"
+                  onClick={() => onReverse?.(row)}
+                  disabled={reversalExpired}
+                  title={reversalExpired
+                    ? 'Reversal requests are only allowed within 12 hours of the welfare transaction being recorded.'
+                    : undefined}
+                >
+                  {canRequestReversal
+                    ? reversalExpired
+                      ? 'Reverse disabled'
+                      : reversalRequestStatus === 'rejected'
+                        ? 'Request reversal again'
+                        : 'Request reversal'
+                    : reversalExpired ? 'Reversal disabled' : 'Request approval'}
+                </button>
+              ) : (
+                <span className="transaction-action-muted">
+                  {requestPending ? 'Under review' : '—'}
+                </span>
+              )}
+            </td>
+          )}
+        </tr>
+      )
+    })}
+  </tbody></table>{rows.length === 0 && <p className="empty-state">No records to show.</p>}</div>
+}
+
+
+========== FILE: client/src/app/moduleRegistry.js ==========
+import AccountPage from '../modules/members/pages/AccountPage.jsx'
+import ApprovalsPage from '../modules/approvals/pages/ApprovalsPage.jsx'
+import AuditLogPage from '../modules/audit/pages/AuditLogPage.jsx'
+import DashboardPage from '../modules/dashboard/pages/DashboardPage.jsx'
+import GroupRulesPage from '../modules/group-rules/pages/GroupRulesPage.jsx'
+import MeetingMinutesPage from '../modules/meetings/pages/MeetingMinutesPage.jsx'
+import MeetingsPage from '../modules/meetings/pages/MeetingsPage.jsx'
+import MembersPage from '../modules/members/pages/MembersPage.jsx'
+import NotificationsPage from '../modules/notifications/pages/NotificationsPage.jsx'
+import ProfilePage from '../modules/members/pages/ProfilePage.jsx'
+import ReportsPage from '../modules/reports/pages/ReportsPage.jsx'
+import TechnicalAdminPage from '../modules/technical-administration/pages/TechnicalAdminPage.jsx'
+import WelfareTransactionsPage from '../modules/welfare/pages/WelfareContributions.jsx'
+
+export const moduleRegistry = {
+  dashboard: DashboardPage,
+  welfareContributions: WelfareTransactionsPage,
+  members: MembersPage,
+  approvals: ApprovalsPage,
+  reports: ReportsPage,
+  account: AccountPage,
+  groupRules: GroupRulesPage,
+  meetings: MeetingsPage,
+  minutes: MeetingMinutesPage,
+  notifications: NotificationsPage,
+  profile: ProfilePage,
+  technicalAdmin: TechnicalAdminPage,
+  auditLog: AuditLogPage,
+}
+
+
+========== FILE: client/src/app/navigation/index.js ==========
+export const defaultPage = 'dashboard'
+
+export function defaultPageFor() {
+  return defaultPage
+}
+
+export function resolvePage(page) {
+  return page || defaultPage
+}

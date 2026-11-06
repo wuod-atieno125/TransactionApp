@@ -1,0 +1,1528 @@
+
+
+==================================================
+FILE: server/src/modules/index.js
+==================================================
+const express = require("express");
+const router = express.Router();
+
+const authRoutes = require("./authentication/authRoutes");
+const adminRoutes = require("./approvals/adminRoutes");
+const memberRoutes = require("./members/memberRoutes");
+const welfareRoutes = require("./welfare");
+const transactionNotificationRoutes = require("./notifications/transactionNotificationRoutes");
+const healthRoutes = require("./health/healthRoutes");
+const dashboardRoutes = require("./dashboard/dashboardRoutes");
+const reportRoutes = require("./reports/reportRoutes");
+const notificationRoutes = require("./notifications/notificationRoutes");
+const groupRulesRoutes = require("./group-rules/groupRulesRoutes");
+const meetingRoutes = require("./meetings/meetingRoutes");
+const meetingMinutesRoutes = require("./meetings/meetingMinutesRoutes");
+const auditRoutes = require("./audit/auditRoutes");
+const groupMembershipRoutes = require("./group-management/groupMembershipRoutes");
+const settingsRoutes = require("./group-management/settingsRoutes");
+const technicalAdminRoutes = require("./technical-administration/technicalAdminRoutes");
+const paymentDestinationRoutes = require("./group-management/paymentDestinationRoutes");
+
+router.use("/auth", authRoutes);
+router.use("/admin", adminRoutes);
+router.use("/members", memberRoutes);
+router.use("/welfare-contributions", welfareRoutes);
+router.use("/welfare", welfareRoutes);
+router.use("/transactions", welfareRoutes);
+router.use("/transactions", transactionNotificationRoutes);
+router.use("/health", healthRoutes);
+router.use("/dashboard", dashboardRoutes);
+router.use("/reports", reportRoutes);
+router.use("/notifications", notificationRoutes);
+router.use("/group-rules", groupRulesRoutes);
+router.use("/meetings", meetingRoutes);
+router.use("/meeting-minutes", meetingMinutesRoutes);
+router.use("/audit", auditRoutes);
+router.use("/group-memberships", groupMembershipRoutes);
+router.use("/settings", settingsRoutes);
+router.use("/technical-admin", technicalAdminRoutes);
+router.use("/payment-destination", paymentDestinationRoutes);
+
+module.exports = router;
+
+
+==================================================
+FILE: server/src/app.js
+==================================================
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const session = require("express-session");
+const pgSession = require("connect-pg-simple")(session);
+const errorHandler = require("./shared/middleware/errorHandler");
+const { createActivityTracker } = require("./shared/middleware/activityTracker");
+
+const { pool } = require("./config/database");
+const {
+  getAllowedClientOrigins,
+  validateFrontendUrl,
+} = require("./config/environment");
+const { createCorsOptions } = require("./config/cors");
+const apiRoutes = require("./modules");
+
+const app = express();
+const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be configured");
+}
+
+const allowedClientOrigins = getAllowedClientOrigins();
+validateFrontendUrl(allowedClientOrigins);
+
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+app.use(helmet());
+app.use(cors(createCorsOptions(allowedClientOrigins)));
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false }));
+
+
+app.use(
+  session({
+    store: new pgSession({
+      pool,
+      tableName: "sessions",
+      createTableIfMissing: false,
+      pruneSessionInterval: 15 * 60, // Clean expired sessions every 15 minutes
+    }),
+    name: "transaction.sid",
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: SESSION_IDLE_TIMEOUT_MS,
+    },
+  })
+);
+
+app.use(createActivityTracker(pool));
+
+app.use("/api", apiRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API endpoint not found",
+  });
+});
+
+app.use(errorHandler);
+
+module.exports = app;
+
+
+==================================================
+FILE: server/src/modules/welfare/index.js
+==================================================
+const welfareRoutes = require("./routes/welfare.routes");
+
+module.exports = welfareRoutes;
+
+
+==================================================
+FILE: server/src/modules/welfare/controllers/welfareBalance.controller.js
+==================================================
+module.exports = {};
+
+
+==================================================
+FILE: server/src/modules/welfare/controllers/welfareContribution.controller.js
+==================================================
+const service = require("../services/welfareContribution.service");
+
+async function list(req, res, next) {
+  try {
+    const { contributions, pagination } = await service.listContributions(
+      {
+        role: String(req.session.user.role || "").toLowerCase(),
+        userId: req.session.user.id,
+      },
+      req.query
+    );
+
+    return res.status(200).json({
+      success: true,
+      transactions: contributions,
+      pagination: {
+        ...pagination,
+        count: contributions.length,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function getById(req, res, next) {
+  try {
+    const transaction = await service.getContribution(req.params.id, {
+      role: String(req.session.user.role || "").toLowerCase(),
+      userId: req.session.user.id,
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Welfare contribution not found.",
+      });
+    }
+
+    return res.status(200).json({ success: true, transaction });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = {
+  list,
+  getById,
+};
+
+
+==================================================
+FILE: server/src/modules/welfare/controllers/welfareManagement.controller.js
+==================================================
+const service = require("../services/welfareManagement.service");
+
+const actor = (req) => ({ userId: req.session.user.id });
+
+async function handle(fn, req, res, next) {
+  try {
+    return res.status(200).json({ success: true, ...(await fn()) });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = {
+  requirements: (req, res, next) => handle(
+    async () => ({ requirements: await service.getRequirementHistory() }), req, res, next
+  ),
+  contributions: async (req, res, next) => {
+    try {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100)
+      const offset = Math.max(Number(req.query.offset) || 0, 0)
+      const contributions = await service.listContributions({
+        role: String(req.session.user.role || "").toLowerCase(),
+        userId: req.session.user.id,
+        limit,
+        offset,
+      })
+      return res.status(200).json({
+        success: true,
+        transactions: contributions,
+        contributions,
+        pagination: { limit, offset, count: contributions.length },
+      })
+    } catch (error) {
+      return next(error)
+    }
+  },
+  setRequirement: (req, res, next) => handle(
+    async () => ({ requirement: await service.setRequirement({ ...req.body, ...actor(req) }) }),
+    req, res, next
+  ),
+  recordContribution: async (req, res, next) => {
+    try {
+      const entry = await service.recordContribution({ ...req.body, ...actor(req) });
+      return res.status(201).json({ success: true, entry });
+    } catch (error) {
+      return next(error);
+    }
+  },
+  statement: async (req, res, next) => {
+    try {
+      const role = String(req.session.user.role || "").toLowerCase();
+      if (role === "member" && req.params.memberId !== req.session.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "You may only view your own welfare statement.",
+        });
+      }
+      const statement = await service.getStatement(req.params.memberId);
+      if (!statement) return res.status(404).json({ success: false, message: "Member welfare account not found." });
+      return res.status(200).json({ success: true, statement });
+    } catch (error) { return next(error); }
+  },
+  balance: (req, res, next) => handle(
+    async () => ({ balance: await service.getGroupBalance() }), req, res, next
+  ),
+  requestWithdrawal: async (req, res, next) => {
+    try {
+      const request = await service.requestWithdrawal({ ...req.body, ...actor(req) });
+      return res.status(201).json({ success: true, request });
+    } catch (error) { return next(error); }
+  },
+  withdrawals: (req, res, next) => handle(
+    async () => ({ withdrawals: await service.listWithdrawals() }), req, res, next
+  ),
+  decideWithdrawal: async (req, res, next) => {
+    try {
+      const request = await service.decideWithdrawal({
+        requestId: req.params.id, approved: req.body.approved === true,
+        reason: req.body.reason, ...actor(req),
+      });
+      return res.status(200).json({ success: true, request });
+    } catch (error) { return next(error); }
+  },
+  executeWithdrawal: async (req, res, next) => {
+    try {
+      const request = await service.executeWithdrawal({ requestId: req.params.id, ...actor(req) });
+      return res.status(200).json({ success: true, request });
+    } catch (error) { return next(error); }
+  },
+};
+
+
+==================================================
+FILE: server/src/modules/welfare/controllers/welfareWithdrawal.controller.js
+==================================================
+module.exports = {};
+
+
+==================================================
+FILE: server/src/modules/welfare/routes/welfare.routes.js
+==================================================
+
+const express = require("express");
+const welfareManagementRoutes = require("./welfareManagement.routes");
+const welfareContributionRoutes = require("./welfareContributionRoutes");
+const welfareContributionDetailRoutes = require("./welfareContributionDetailRoutes");
+const welfareContributionReportRoutes = require("./welfareContributionReportRoutes");
+const welfareContributionReversalRoutes = require("./welfareContributionReversalRoutes");
+
+const router = express.Router();
+
+router.use(welfareManagementRoutes);
+router.use(welfareContributionReversalRoutes);
+router.use(welfareContributionReportRoutes);
+router.use(welfareContributionRoutes);
+router.use(welfareContributionDetailRoutes);
+
+module.exports = router;
+
+==================================================
+FILE: server/src/modules/welfare/routes/welfareContributionRoutes.js
+==================================================
+const express = require("express");
+const { query, pool } = require("../../../config/database");
+const { requireAuth, requireRole } = require("../../../shared/middleware/auth");
+
+
+const router = express.Router();
+const MEMBER_REVERSAL_WINDOW_MINUTES = 15;
+
+function getPagination(queryParams) {
+  const parseIntegerParam = (value) => {
+    if (value === undefined || value === "") {
+      return null;
+    }
+
+    if (
+      typeof value !== "string" ||
+      !/^\d+$/.test(value)
+    ) {
+      return NaN;
+    }
+
+    const parsed = Number(value);
+
+    return Number.isSafeInteger(parsed) ? parsed : NaN;
+  };
+
+  const parsedLimit = parseIntegerParam(queryParams.limit);
+  const parsedOffset = parseIntegerParam(queryParams.offset);
+
+  if (
+    Number.isNaN(parsedLimit) ||
+    Number.isNaN(parsedOffset) ||
+    (parsedLimit !== null && parsedLimit < 1) ||
+    (parsedOffset !== null && parsedOffset < 0)
+  ) {
+    return { error: "Invalid pagination parameters." };
+  }
+
+  return {
+    limit: parsedLimit === null ? 50 : Math.min(parsedLimit, 100),
+    offset: parsedOffset === null ? 0 : parsedOffset,
+  };
+}
+function isValidDateRange(startDate, endDate, maxDays = 366) {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (
+    typeof startDate !== "string" ||
+    typeof endDate !== "string" ||
+    !datePattern.test(startDate) ||
+    !datePattern.test(endDate)
+  ) {
+    return false;
+  }
+
+  function toUtcDay(value) {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    return Math.floor(date.getTime() / 86400000);
+  }
+
+  const start = toUtcDay(startDate);
+  const end = toUtcDay(endDate);
+
+  return (
+    start !== null &&
+    end !== null &&
+    end >= start &&
+    end - start < maxDays
+  );
+}
+
+async function reverseTransaction(client, {
+  transaction,
+  actorUserId,
+  reason,
+  approvalRequestId = null,
+  excludedMemberUserId = null,
+}) {
+  const result = await client.query(
+    `UPDATE transactions
+     SET status = 'reversed',
+         updated_by = $1,
+         updated_at = NOW()
+     WHERE id = $2
+       AND status = 'active'
+     RETURNING *`,
+    [actorUserId, transaction.id]
+  );
+  const reversedTransaction = result.rows[0];
+
+  if (!reversedTransaction) {
+    const error = new Error("Active transaction not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  await client.query(
+    `INSERT INTO audit_logs (
+       actor_user_id, action, target_type, target_id,
+       old_values, new_values
+     )
+     VALUES ($1, 'transaction_reversed', 'transaction', $2, $3::jsonb, $4::jsonb)`,
+    [
+      actorUserId,
+      transaction.id,
+      JSON.stringify(transaction),
+      JSON.stringify({
+        ...reversedTransaction,
+        reversal_reason: reason,
+        reversal_approval_request_id: approvalRequestId,
+      }),
+    ]
+  );
+
+  await client.query(
+    `INSERT INTO notifications (
+       recipient_user_id, transaction_id, event_type, title, message
+     )
+     SELECT id, $1, 'transaction_updated',
+            'Contribution reversal completed',
+            'A contribution reversal was approved and completed.'
+     FROM users
+     WHERE role = 'member'
+       AND account_status = 'approved'
+       AND deleted_at IS NULL
+       AND ($2::uuid IS NULL OR id <> $2)`,
+    [
+      transaction.id,
+      excludedMemberUserId,
+    ]
+  );
+
+  return reversedTransaction;
+}
+
+// GET /api/transactions
+
+router.get(
+  "/",
+  requireAuth,
+  requireRole("member", "treasurer", "chairperson", "secretary"),
+  async (req, res, next) => {
+    try {
+      const pagination = getPagination(req.query);
+
+      if (pagination.error) {
+        return res.status(400).json({
+          success: false,
+          message: pagination.error,
+        });
+      }
+
+      const { limit, offset } = pagination;
+
+      const role = String(req.session.user.role || "").toLowerCase();
+
+      let result;
+
+      if (role === "member" || role === "secretary") {
+        result = await query(
+          `SELECT transactions.id, transactions.member_user_id,
+                  transactions.entered_member_name, transactions.amount,
+                  transactions.paid_at, transactions.mpesa_reference,
+                  transactions.status, transactions.notes,
+                  transactions.created_at, transactions.updated_at,
+                  reversal_request.status AS reversal_request_status,
+                  transactions.created_at >= NOW() - INTERVAL '12 hours'
+                    AS reversal_allowed
+           FROM transactions
+           LEFT JOIN LATERAL (
+             SELECT status
+             FROM transaction_reversal_requests
+             WHERE transaction_id = transactions.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) reversal_request ON TRUE
+           WHERE transactions.member_user_id = $1
+             AND (
+               transactions.status = 'active'
+               OR reversal_request.status = 'approved'
+             )
+           ORDER BY transactions.paid_at DESC
+           LIMIT $2 OFFSET $3`,
+          [req.session.user.id, limit, offset]
+        );
+      } else {
+        result = await query(
+          `SELECT transactions.id, transactions.member_user_id,
+                  transactions.entered_member_name, transactions.amount,
+                  transactions.paid_at, transactions.mpesa_reference,
+                  transactions.status, transactions.notes,
+                  transactions.created_at, transactions.updated_at,
+                  reversal_request.status AS reversal_request_status,
+                  transactions.created_at >= NOW() - INTERVAL '12 hours'
+                    AS reversal_allowed
+           FROM transactions
+           LEFT JOIN LATERAL (
+             SELECT status
+             FROM transaction_reversal_requests
+             WHERE transaction_id = transactions.id
+             ORDER BY created_at DESC
+             LIMIT 1
+           ) reversal_request ON TRUE
+           WHERE transactions.status IN ('active', 'reversed')
+           ORDER BY transactions.paid_at DESC
+           LIMIT $1 OFFSET $2`,
+          [limit, offset]
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        transactions: result.rows,
+        pagination: {
+          limit,
+          offset,
+          count: result.rows.length,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/transactions
+router.post(
+  "/",
+  requireAuth,
+  requireRole("treasurer"),
+  async (req, res, next) => {
+    const {
+      memberUserId,
+      enteredMemberName,
+      amount,
+      paidAt,
+      mpesaReference,
+      notes,
+    } = req.body;
+
+    const name =
+    typeof enteredMemberName === "string"
+      ? enteredMemberName.trim()
+      : "";
+    const parsedAmount = Number(amount);
+
+
+    if (!name || name.length > 150) {
+      return res.status(400).json({
+        success: false,
+        message: "Member name is required and must not exceed 150 characters.",
+      });
+    }
+
+    if (
+      amount === undefined ||
+  amount === null ||
+  amount === "" ||
+  !Number.isFinite(parsedAmount) ||
+  parsedAmount <= 0 ||
+  parsedAmount > 9999999999.99 ||
+  Math.round(parsedAmount * 100) !== parsedAmount * 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must be a valid positive amount with at most two decimal places.",
+      });
+    }
+
+    if (
+      memberUserId !== undefined &&
+    memberUserId !== null &&
+    (typeof memberUserId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(memberUserId))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid member user ID.",
+      });
+    }
+
+    if (
+      mpesaReference !== undefined &&
+  mpesaReference !== null &&
+  typeof mpesaReference !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "M-Pesa reference must be text.",
+      });
+    }
+
+    if (
+      typeof mpesaReference === "string" &&
+  mpesaReference.trim().length > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "M-Pesa reference must not exceed 100 characters.",
+      });
+    }
+
+    if (
+      notes !== undefined &&
+  notes !== null &&
+  typeof notes !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Notes must be text.",
+      });
+    }
+
+    if (
+      paidAt !== undefined &&
+  (
+    typeof paidAt !== "string" ||
+    paidAt.trim() === "" ||
+    !Number.isFinite(Date.parse(paidAt))
+  )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Paid date must be a valid date string.",
+      });
+    }
+
+    const reference = mpesaReference?.trim() || null;
+    const normalizedReference = reference
+      ? reference.toUpperCase()
+      : null;
+
+    let client;
+
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+
+      if (memberUserId) {
+        const memberResult = await client.query(
+          `SELECT id
+   FROM users
+   WHERE id = $1
+     AND role = 'member'
+     AND account_status = 'approved'
+     AND deleted_at IS NULL`,
+          [memberUserId]
+        );
+
+        if (memberResult.rows.length === 0) {
+          await client.query("ROLLBACK");
+
+          return res.status(400).json({
+            success: false,
+            message: "Approved member account not found.",
+          });
+        }
+      }
+
+      const result = await client.query(
+        `INSERT INTO transactions (
+         member_user_id,
+         entered_member_name,
+         amount,
+         paid_at,
+         mpesa_reference,
+         normalized_mpesa_reference,
+         status,
+         notes,
+         created_by,
+         updated_by
+       )
+       VALUES (
+         $1, $2, $3, COALESCE($4::timestamptz, NOW()),
+         $5, $6, 'active', $7, $8, $8
+       )
+       RETURNING
+         id,
+         member_user_id,
+         entered_member_name,
+         amount,
+         paid_at,
+         mpesa_reference,
+         status,
+         notes,
+         created_by,
+         created_at`,
+        [
+          memberUserId || null,
+          name,
+          parsedAmount,
+          paidAt || null,
+          reference,
+          normalizedReference,
+          typeof notes === "string" && notes.trim()
+            ? notes.trim()
+            : null,
+          req.session.user.id,
+        ]
+      );
+
+      const transaction = result.rows[0];
+
+      // Insert the audit log using the actual audit_logs schema.
+      await client.query(
+        `INSERT INTO audit_logs (
+     actor_user_id,
+     action,
+     target_type,
+     target_id,
+     old_values,
+     new_values
+   )
+   VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+        [
+          req.session.user.id,
+          "transaction_created",
+          "transaction",
+          transaction.id,
+          null,
+          JSON.stringify(transaction),
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO notifications (
+           recipient_user_id,
+           transaction_id,
+           event_type,
+           title,
+           message
+         )
+         SELECT id, $1, 'transaction_created',
+                'Contribution recorded',
+                $2
+         FROM users
+         WHERE role = 'member'
+           AND account_status = 'approved'
+           AND deleted_at IS NULL`,
+        [
+          transaction.id,
+          `A contribution has been recorded for ${transaction.entered_member_name}.`,
+        ]
+      );
+
+      await client.query("COMMIT");
+
+      return res.status(201).json({
+        success: true,
+        message: "Transaction recorded successfully.",
+        transaction,
+      });
+    } catch (error) {
+      if (client) {
+        await client.query("ROLLBACK").catch(() => {});
+      }
+
+      if (error.code === "23505") {
+        return res.status(409).json({
+          success: false,
+          message: "This M-Pesa reference has already been recorded.",
+        });
+      }
+
+      if (error.code === "23503") {
+        return res.status(400).json({
+          success: false,
+          message: "A referenced user does not exist.",
+        });
+      }
+
+      return next(error);
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  });
+// patch
+
+router.patch(
+  "/:id",
+  requireAuth,
+  requireRole("treasurer"),
+  async (req, res, next) => {
+    const { id } = req.params;
+    let {
+      enteredMemberName,
+      amount,
+      paidAt,
+      mpesaReference,
+      notes,
+    } = req.body;
+
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID.",
+      });
+    }
+
+    if (enteredMemberName !== undefined) {
+      if (
+        typeof enteredMemberName !== "string" ||
+        !enteredMemberName.trim() ||
+        enteredMemberName.trim().length > 150
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Member name is required and must not exceed 150 characters.",
+        });
+      }
+
+      enteredMemberName = enteredMemberName.trim();
+    }
+
+    if (amount !== undefined) {
+      const parsedAmount = Number(amount);
+
+      if (
+        amount === null ||
+        amount === "" ||
+        !Number.isFinite(parsedAmount) ||
+        parsedAmount <= 0 ||
+        parsedAmount > 9999999999.99 ||
+        Math.round(parsedAmount * 100) !== parsedAmount * 100
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Amount must be positive, must not exceed 9999999999.99, and may have at most two decimal places.",
+        });
+      }
+    }
+
+    if (paidAt !== undefined) {
+      const parsedDate =
+        typeof paidAt === "string" ? Date.parse(paidAt) : NaN;
+
+      if (
+        typeof paidAt !== "string" ||
+        !paidAt.trim() ||
+        !Number.isFinite(parsedDate)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Paid date must be a valid date string.",
+        });
+      }
+    }
+
+    if (
+      mpesaReference !== undefined &&
+      mpesaReference !== null &&
+      (typeof mpesaReference !== "string" ||
+        mpesaReference.trim().length > 100)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid M-Pesa reference.",
+      });
+    }
+
+    if (
+      notes !== undefined &&
+      notes !== null &&
+      typeof notes !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Notes must be text.",
+      });
+    }
+
+    if (typeof notes === "string" && notes.trim().length > 5000) {
+      return res.status(400).json({
+        success: false,
+        message: "Notes must not exceed 5000 characters.",
+      });
+    }
+
+    const reason =
+      typeof req.body?.reason === "string"
+        ? req.body.reason.trim()
+        : "";
+
+    if (!reason || reason.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A reason is required and must not exceed 1000 characters.",
+      });
+    }
+
+    let client;
+
+    try {
+      client = await pool.connect();
+      await client.query("BEGIN");
+
+      const existingResult = await client.query(
+        `SELECT *
+         FROM transactions
+         WHERE id = $1 AND status = 'active'
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (existingResult.rowCount === 0) {
+        await client.query("ROLLBACK").catch(()=>{});
+        return res.status(404).json({
+          success: false,
+          message: "Active transaction not found.",
+        });
+      }
+
+      const oldTransaction = existingResult.rows[0];
+
+      const name =
+        enteredMemberName === undefined
+          ? oldTransaction.entered_member_name
+          : enteredMemberName.trim();
+
+      const newAmount =
+        amount === undefined ? oldTransaction.amount : Number(amount);
+
+      const newPaidAt =
+        paidAt === undefined ? oldTransaction.paid_at : paidAt;
+
+      const reference =
+        mpesaReference === undefined
+          ? oldTransaction.mpesa_reference
+          : typeof mpesaReference === "string" && mpesaReference.trim()
+            ? mpesaReference.trim()
+            : null;
+
+      const normalizedReference = reference
+        ? reference.toUpperCase()
+        : null;
+
+      const newNotes =
+        notes === undefined
+          ? oldTransaction.notes
+          : typeof notes === "string" && notes.trim()
+            ? notes.trim()
+            : null;
+
+      const updatedResult = await client.query(
+        `UPDATE transactions
+         SET entered_member_name = $1,
+             amount = $2,
+             paid_at = $3,
+             mpesa_reference = $4,
+             normalized_mpesa_reference = $5,
+             notes = $6,
+             updated_by = $7,
+             updated_at = NOW()
+         WHERE id = $8
+         RETURNING *`,
+        [
+          name,
+          newAmount,
+          newPaidAt,
+          reference,
+          normalizedReference,
+          newNotes,
+          req.session.user.id,
+          id,
+        ]
+      );
+
+      const updatedTransaction = updatedResult.rows[0];
+
+      await client.query(
+        `INSERT INTO audit_logs (
+           actor_user_id, action, target_type, target_id,
+           old_values, new_values
+         )
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+        [
+          req.session.user.id,
+          "transaction_updated",
+          "transaction",
+          id,
+          JSON.stringify(oldTransaction),
+          JSON.stringify({
+            ...updatedTransaction,
+            change_reason: reason,
+          }),
+        ]
+      );
+
+      if (updatedTransaction.member_user_id) {
+        await client.query(
+          `INSERT INTO notifications (
+             recipient_user_id, transaction_id,
+             event_type, title, message
+           )
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            updatedTransaction.member_user_id,
+            id,
+            "transaction_updated",
+            "Contribution updated",
+            `Your contribution of ${updatedTransaction.amount} has been updated.`,
+          ]
+        );
+      }
+
+      await client.query("COMMIT");
+
+      return res.status(200).json({
+        success: true,
+        message: "Transaction updated successfully.",
+        transaction: updatedTransaction,
+      });
+    } catch (error) {
+
+      if (client) {
+        await client.query("ROLLBACK").catch((rollbackError) => {
+          console.error("Transaction update rollback failed:", rollbackError);
+        });
+      }
+
+      if (error.code === "23505") {
+        return res.status(409).json({
+          success: false,
+          message: "This M-Pesa reference has already been recorded.",
+        });
+      }
+
+      return next(error);
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  }
+);
+module.exports = router;
+
+
+==================================================
+FILE: server/src/modules/welfare/routes/welfareManagement.routes.js
+==================================================
+const express = require("express");
+const { requireAuth, requireRole } = require("../../../shared/middleware/auth");
+const controller = require("../controllers/welfareManagement.controller");
+
+const router = express.Router();
+router.use(requireAuth);
+
+router.get("/requirements", requireRole("member", "treasurer", "chairperson", "secretary"), controller.requirements);
+router.put("/requirements", requireRole("chairperson"), controller.setRequirement);
+router.get("/contributions", requireRole("member", "treasurer", "chairperson", "secretary"), controller.contributions);
+router.post("/contributions", requireRole("treasurer"), controller.recordContribution);
+router.get("/members/:memberId/statement", requireRole("member", "treasurer", "chairperson", "secretary"), controller.statement);
+router.get("/balance", requireRole("treasurer", "chairperson", "secretary"), controller.balance);
+router.post("/withdrawals", requireRole("treasurer"), controller.requestWithdrawal);
+router.get("/withdrawals", requireRole("treasurer", "chairperson", "secretary"), controller.withdrawals);
+router.patch("/withdrawals/:id/decision", requireRole("chairperson"), controller.decideWithdrawal);
+router.post("/withdrawals/:id/execute", requireRole("treasurer"), controller.executeWithdrawal);
+
+module.exports = router;
+
+
+==================================================
+FILE: server/src/modules/welfare/services/welfareBalance.service.js
+==================================================
+module.exports = {};
+
+
+==================================================
+FILE: server/src/modules/welfare/services/welfareContribution.service.js
+==================================================
+const repository = require("../repositories/welfareContribution.repository");
+
+function parsePagination(queryParams = {}) {
+  const parse = (value, fallback) => {
+    if (value === undefined || value === "") return fallback;
+    if (typeof value !== "string" || !/^\d+$/.test(value)) {
+      const error = new Error("Invalid pagination parameters.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed)) {
+      const error = new Error("Invalid pagination parameters.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return parsed;
+  };
+
+  const limit = parse(queryParams.limit, 50);
+  const offset = parse(queryParams.offset, 0);
+
+  if (limit < 1 || offset < 0) {
+    const error = new Error("Invalid pagination parameters.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    limit: Math.min(limit, 100),
+    offset,
+  };
+}
+
+async function getContribution(id, actor) {
+  return repository.findById(id, actor);
+}
+
+async function listContributions(actor, queryParams) {
+  const pagination = parsePagination(queryParams);
+  const contributions = await repository.list({ ...actor, ...pagination });
+
+  return { contributions, pagination };
+}
+
+module.exports = {
+  getContribution,
+  listContributions,
+  parsePagination,
+};
+
+
+==================================================
+FILE: server/src/modules/welfare/services/welfareManagement.service.js
+==================================================
+const { getClient, query } = require("../../../config/database");
+
+function assertAmount(value, field = "Amount") {
+  const amount = typeof value === "number" || typeof value === "string"
+    ? Number(value)
+    : NaN;
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 9999999999.99
+      || !/^\d+(\.\d{1,2})?$/.test(String(value))) {
+    const error = new Error(`${field} must be positive with no more than two decimal places.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return amount.toFixed(2);
+}
+
+function requireText(value, field, maxLength) {
+  if (typeof value !== "string" || value.trim().length < 3 || value.trim().length > maxLength) {
+    const error = new Error(`${field} must be between 3 and ${maxLength} characters.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return value.trim();
+}
+
+async function getRequirementHistory() {
+  const result = await query(
+    `SELECT r.*, u.full_name AS set_by_name
+     FROM welfare_contribution_requirements r
+     JOIN users u ON u.id = r.set_by
+     ORDER BY r.created_at DESC`
+  );
+  return result.rows;
+}
+
+async function listContributions({ role, userId, limit = 50, offset = 0 }) {
+  const result = await query(
+    `SELECT l.id,
+            l.member_user_id,
+            u.full_name AS entered_member_name,
+            l.amount,
+            l.created_at AS paid_at,
+            l.source_payment_reference AS mpesa_reference,
+            l.entry_type,
+            l.balance_before,
+            l.balance_after,
+            l.description AS notes,
+            l.created_at
+     FROM welfare_ledger_entries l
+     LEFT JOIN users u ON u.id = l.member_user_id
+     WHERE l.entry_type IN ('deposit', 'reversal')
+       AND ($1 IN ('treasurer', 'chairperson') OR l.member_user_id = $2)
+     ORDER BY l.created_at DESC
+     LIMIT $3 OFFSET $4`,
+    [role, userId, limit, offset]
+  );
+  return result.rows;
+}
+
+async function setRequirement({ amount, reason, userId }) {
+  const normalizedAmount = assertAmount(amount, "Contribution amount");
+  const client = await getClient();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE welfare_contribution_requirements
+       SET ended_at = NOW()
+       WHERE ended_at IS NULL`
+    );
+    const result = await client.query(
+      `INSERT INTO welfare_contribution_requirements (amount, reason, set_by)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [normalizedAmount, reason ? requireText(reason, "Reason", 1000) : null, userId]
+    );
+    await client.query(
+      `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, new_values)
+       VALUES ($1, 'welfare_requirement_changed', 'welfare_requirement', $2, $3::jsonb)`,
+      [userId, result.rows[0].id, JSON.stringify(result.rows[0])]
+    );
+    await client.query(
+      `INSERT INTO notifications (recipient_user_id, event_type, title, message)
+       SELECT id, 'welfare_requirement_changed', 'Welfare contribution amount changed',
+              $1 FROM users
+       WHERE role = 'member' AND account_status = 'approved' AND deleted_at IS NULL`,
+      [`The required welfare contribution is now KSh ${normalizedAmount}.`]
+    );
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function recordContribution({ memberUserId, amount, description, userId }) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(memberUserId || "")) {
+    const error = new Error("Member user ID must be a valid UUID.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const normalizedAmount = assertAmount(amount);
+  const client = await getClient();
+
+  try {
+    await client.query("BEGIN");
+    const member = await client.query(
+      `SELECT id, full_name FROM users
+       WHERE id = $1 AND role = 'member' AND account_status = 'approved' AND deleted_at IS NULL`,
+      [memberUserId]
+    );
+    if (!member.rowCount) {
+      const error = new Error("Approved member account not found.");
+      error.statusCode = 400;
+      throw error;
+    }
+    const requirement = await client.query(
+      `SELECT amount FROM welfare_contribution_requirements
+       WHERE ended_at IS NULL LIMIT 1`
+    );
+    if (!requirement.rowCount || Number(requirement.rows[0].amount) !== Number(normalizedAmount)) {
+      const error = new Error("Contribution amount must match the currently required welfare amount.");
+      error.statusCode = 400;
+      throw error;
+    }
+    await client.query("SELECT pg_advisory_xact_lock(284731)");
+    const balance = await client.query(
+      `SELECT COALESCE(SUM(
+         CASE WHEN entry_type = 'deposit' THEN amount ELSE -amount END
+       ), 0)::numeric(12,2) AS balance
+       FROM welfare_ledger_entries WHERE member_user_id = $1`,
+      [memberUserId]
+    );
+    const before = Number(balance.rows[0].balance);
+    const after = (before + Number(normalizedAmount)).toFixed(2);
+    const entry = await client.query(
+      `INSERT INTO welfare_ledger_entries
+       (member_user_id, entry_type, amount, balance_before, balance_after, recorded_by, description)
+       VALUES ($1, 'deposit', $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [memberUserId, normalizedAmount, before.toFixed(2), after, userId, description || null]
+    );
+    await client.query(
+      `INSERT INTO notifications (recipient_user_id, event_type, title, message)
+       SELECT id, 'welfare_contribution_recorded', 'Welfare contribution recorded',
+              $1 FROM users WHERE role = 'member' AND account_status = 'approved'
+              AND deleted_at IS NULL`,
+      [`A welfare contribution of KSh ${normalizedAmount} was recorded for ${member.rows[0].full_name}.`]
+    );
+    await client.query("COMMIT");
+    return entry.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function getStatement(memberUserId) {
+  const result = await query(
+    `SELECT u.id, u.full_name, u.phone,
+            COALESCE(SUM(CASE WHEN l.entry_type = 'deposit' THEN l.amount ELSE -l.amount END), 0)::numeric(12,2) AS balance,
+            COALESCE(SUM(l.amount) FILTER (WHERE l.entry_type = 'deposit'), 0)::numeric(12,2) AS total_contributions,
+            json_agg(l ORDER BY l.created_at DESC) FILTER (WHERE l.id IS NOT NULL) AS entries
+     FROM users u
+     LEFT JOIN welfare_ledger_entries l ON l.member_user_id = u.id
+     WHERE u.id = $1 AND u.role = 'member' AND u.deleted_at IS NULL
+     GROUP BY u.id`,
+    [memberUserId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getGroupBalance() {
+  const result = await query(
+    `SELECT COALESCE(SUM(CASE WHEN entry_type = 'deposit' THEN amount ELSE -amount END), 0)::numeric(12,2) AS balance,
+            COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deposit'), 0)::numeric(12,2) AS total_contributions
+     FROM welfare_ledger_entries
+     WHERE member_user_id IS NOT NULL`
+  );
+  return result.rows[0];
+}
+
+async function requestWithdrawal({ amount, purpose, userId }) {
+  const requestedAmount = assertAmount(amount, "Requested amount");
+  const normalizedPurpose = requireText(purpose, "Purpose", 1000);
+  const requester = await query(
+    `SELECT id, full_name, phone, role FROM users WHERE id = $1`,
+    [userId]
+  );
+  const client = await getClient();
+  try {
+    const snapshot = requester.rows[0];
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO welfare_withdrawal_requests
+       (requested_amount, purpose, requested_by, requester_snapshot)
+       VALUES ($1, $2, $3, $4::jsonb) RETURNING *`,
+      [requestedAmount, normalizedPurpose, userId, JSON.stringify(snapshot)]
+    );
+    await client.query(
+      `INSERT INTO notifications (recipient_user_id, event_type, title, message)
+       SELECT id, 'welfare_withdrawal_requested', 'Welfare withdrawal approval requested',
+              $1 FROM users WHERE role = 'member' AND account_status = 'approved'
+              AND deleted_at IS NULL`,
+      [`A collective welfare withdrawal request for KSh ${requestedAmount} requires chairperson review.`]
+    );
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function listWithdrawals() {
+  const result = await query(
+    `SELECT r.*, requester.full_name AS requester_name,
+            reviewer.full_name AS reviewer_name
+     FROM welfare_withdrawal_requests r
+     JOIN users requester ON requester.id = r.requested_by
+     LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
+     ORDER BY r.requested_at DESC`
+  );
+  return result.rows;
+}
+
+async function decideWithdrawal({ requestId, approved, reason, userId }) {
+  const reviewer = await query(`SELECT id, full_name, phone, role FROM users WHERE id = $1`, [userId]);
+  const client = await getClient();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE welfare_withdrawal_requests
+       SET status = $1, reviewed_by = $2, reviewed_at = NOW(),
+           review_reason = $3, reviewer_snapshot = $4::jsonb
+       WHERE id = $5 AND status = 'pending'
+       RETURNING *`,
+      [approved ? "approved" : "rejected", userId, reason || null, JSON.stringify(reviewer.rows[0]), requestId]
+    );
+    if (!result.rowCount) {
+      const error = new Error("Pending welfare withdrawal request not found.");
+      error.statusCode = 404;
+      throw error;
+    }
+    await client.query(
+      `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, new_values)
+       VALUES ($1, $2, 'welfare_withdrawal_request', $3, $4::jsonb)`,
+      [userId, approved ? "welfare_withdrawal_approved" : "welfare_withdrawal_rejected",
+       requestId, JSON.stringify(result.rows[0])]
+    );
+    await client.query(
+      `INSERT INTO notifications (recipient_user_id, event_type, title, message)
+       SELECT id, 'welfare_withdrawal_decided', 'Welfare withdrawal request decided', $1
+       FROM users WHERE role = 'member' AND account_status = 'approved'
+       AND deleted_at IS NULL`,
+      [`The collective welfare withdrawal request was ${approved ? "approved" : "rejected"}.`]
+    );
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function executeWithdrawal({ requestId, userId }) {
+  const client = await getClient();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(284731)");
+    const request = await client.query(
+      `SELECT * FROM welfare_withdrawal_requests WHERE id = $1 FOR UPDATE`,
+      [requestId]
+    );
+    if (!request.rowCount || request.rows[0].status !== "approved") {
+      const error = new Error("Only an approved welfare withdrawal can be executed.");
+      error.statusCode = 409;
+      throw error;
+    }
+    const members = await client.query(
+      `SELECT u.id, u.full_name, u.phone,
+              COALESCE(SUM(CASE WHEN l.entry_type = 'deposit' THEN l.amount ELSE -l.amount END), 0)::numeric(12,2) AS balance
+       FROM users u LEFT JOIN welfare_ledger_entries l ON l.member_user_id = u.id
+       WHERE u.role = 'member' AND u.account_status = 'approved' AND u.deleted_at IS NULL
+       GROUP BY u.id FOR UPDATE OF u`
+    );
+    const total = members.rows.reduce((sum, member) => sum + Number(member.balance), 0);
+    const deductionTotal = members.rows.reduce((sum, member) => sum + Number((Number(member.balance) / 2).toFixed(2)), 0);
+    if (Number(request.rows[0].requested_amount) !== Number(deductionTotal.toFixed(2))) {
+      const error = new Error("Requested amount must equal 50% of the current welfare balance.");
+      error.statusCode = 409;
+      throw error;
+    }
+    for (const member of members.rows) {
+      const before = Number(member.balance);
+      const amount = Number((before / 2).toFixed(2));
+      if (!amount) continue;
+      await client.query(
+        `INSERT INTO welfare_ledger_entries
+         (member_user_id, entry_type, amount, balance_before, balance_after,
+          welfare_withdrawal_request_id, recorded_by, description)
+         VALUES ($1, 'deduction', $2, $3, $4, $5, $6, $7)`,
+        [member.id, amount.toFixed(2), before.toFixed(2), (before - amount).toFixed(2),
+         requestId, userId, "50% collective welfare withdrawal deduction"]
+      );
+    }
+    await client.query(
+      `INSERT INTO welfare_ledger_entries
+       (entry_type, amount, balance_before, balance_after, welfare_withdrawal_request_id, recorded_by, description)
+       VALUES ('withdrawal', $1, $2, $3, $4, $5, $6)`,
+      [deductionTotal.toFixed(2), total.toFixed(2), (total - deductionTotal).toFixed(2),
+       requestId, userId, request.rows[0].purpose]
+    );
+    const updated = await client.query(
+      `UPDATE welfare_withdrawal_requests
+       SET status = 'executed', executed_by = $1, executed_at = NOW()
+       WHERE id = $2 RETURNING *`,
+      [userId, requestId]
+    );
+    await client.query(
+      `INSERT INTO notifications (recipient_user_id, event_type, title, message)
+       SELECT id, 'welfare_withdrawal_executed', 'Collective welfare withdrawal executed',
+              $1 FROM users WHERE role = 'member' AND account_status = 'approved'
+              AND deleted_at IS NULL`,
+      [`KSh ${deductionTotal.toFixed(2)} was deducted at 50% from each member's welfare balance.`]
+    );
+    await client.query("COMMIT");
+    return updated.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = {
+  getRequirementHistory,
+  listContributions,
+  setRequirement,
+  recordContribution,
+  getStatement,
+  getGroupBalance,
+  requestWithdrawal,
+  listWithdrawals,
+  decideWithdrawal,
+  executeWithdrawal,
+};
+
+
+==================================================
+FILE: server/src/modules/welfare/services/welfareWithdrwal.service.js
+==================================================
+module.exports = {};
